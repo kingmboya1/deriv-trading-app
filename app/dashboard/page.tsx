@@ -128,7 +128,7 @@ export default async function DashboardPage() {
           </p>
         </header>
 
-        <BalanceBar realBalance={realBalance} demoBalance={demoBalance} wsUrl={wsUrl} />
+        <BalanceBar realBalance={realBalance} demoBalance={demoBalance} wsUrl={wsUrl} connectedAccountType="demo" />
 
         <MarketPanel wsUrl={wsUrl} />
 

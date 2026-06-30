@@ -6,12 +6,20 @@ interface BalanceBarProps {
   realBalance: number;
   demoBalance: number;
   wsUrl?: string;
+  connectedAccountType?: "real" | "demo";
 }
 
-export default function BalanceBar({ realBalance, demoBalance, wsUrl }: BalanceBarProps) {
+export default function BalanceBar({ realBalance, demoBalance, wsUrl, connectedAccountType = "demo" }: BalanceBarProps) {
   const [activeTab, setActiveTab] = useState<"real" | "demo">("real");
   const [liveBalance, setLiveBalance] = useState<number | null>(null);
-  const balance = activeTab === "real" ? (liveBalance ?? realBalance) : demoBalance;
+  const balance =
+    activeTab === "real"
+      ? connectedAccountType === "real"
+        ? (liveBalance ?? realBalance)
+        : realBalance
+      : connectedAccountType === "demo"
+        ? (liveBalance ?? demoBalance)
+        : demoBalance;
 
   useEffect(() => {
     if (!wsUrl) {
