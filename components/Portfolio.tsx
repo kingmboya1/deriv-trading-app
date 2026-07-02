@@ -1,10 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
-interface PortfolioProps {
-  wsUrl: string;
-}
+import { useEffect } from "react";
+import { useDerivSocketStore } from "@/lib/derivsocket";
 
 type TradeRecord = {
   contract_id?: number | string;
@@ -61,91 +58,15 @@ function inferTradeType(record: TradeRecord): string {
   return rawType ? String(rawType) : "-";
 }
 
-function extractTrades(payload: unknown): TradeRecord[] {
-  if (Array.isArray(payload)) {
-    return payload as TradeRecord[];
-  }
-
-  if (payload && typeof payload === "object") {
-    const objectPayload = payload as Record<string, unknown>;
-
-    if (Array.isArray(objectPayload.profit_table)) {
-      return objectPayload.profit_table as TradeRecord[];
-    }
-
-    if (Array.isArray(objectPayload.data)) {
-      return objectPayload.data as TradeRecord[];
-    }
-
-    if (Array.isArray(objectPayload.trades)) {
-      return objectPayload.trades as TradeRecord[];
-    }
-
-    if (Array.isArray(objectPayload.transactions)) {
-      return objectPayload.transactions as TradeRecord[];
-    }
-
-    if (objectPayload.profit_table && typeof objectPayload.profit_table === "object") {
-      const nested = objectPayload.profit_table as Record<string, unknown>;
-      if (Array.isArray(nested.data)) {
-        return nested.data as TradeRecord[];
-      }
-      if (Array.isArray(nested.transactions)) {
-        return nested.transactions as TradeRecord[];
-      }
-      if (Array.isArray(nested.trades)) {
-        return nested.trades as TradeRecord[];
-      }
-    }
-  }
-
-  return [];
-}
-
-export default function Portfolio({ wsUrl }: PortfolioProps) {
-  const [trades, setTrades] = useState<TradeRecord[]>([]);
-  const socketRef = useRef<WebSocket | null>(null);
-  const intervalRef = useRef<number | null>(null);
+export default function Portfolio() {
+  const connect = useDerivSocketStore((state) => state.connect);
+  const portfolio = useDerivSocketStore((state) => state.portfolio);
 
   useEffect(() => {
-    if (!wsUrl) {
-      return;
-    }
+    void connect();
+  }, [connect]);
 
-    const socket = new WebSocket(wsUrl);
-    socketRef.current = socket;
-
-    const requestProfitTable = () => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 10 }));
-      }
-    };
-
-    socket.addEventListener("open", () => {
-      requestProfitTable();
-      intervalRef.current = window.setInterval(requestProfitTable, 30000);
-    });
-
-    socket.addEventListener("message", (event) => {
-      try {
-        const payload = JSON.parse(event.data as string);
-        const nextTrades = extractTrades(payload);
-        setTrades(nextTrades);
-      } catch {
-        // Ignore malformed payloads.
-      }
-    });
-
-    return () => {
-      if (intervalRef.current !== null) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-
-      socket.close();
-      socketRef.current = null;
-    };
-  }, [wsUrl]);
+  const trades = Object.values(portfolio) as TradeRecord[];
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">

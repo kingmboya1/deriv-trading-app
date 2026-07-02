@@ -132,7 +132,7 @@ export default async function DashboardPage() {
 
         <MarketPanel wsUrl={wsUrl} />
 
-        <Portfolio wsUrl={wsUrl} />
+        <Portfolio />
       </div>
     </main>
   );

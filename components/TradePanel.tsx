@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useDerivSocketStore } from "@/lib/derivsocket";
 interface TradePanelProps {
   symbol?: string;
+  wsUrl?: string;
 }
 
 type ProposalResponse = {
