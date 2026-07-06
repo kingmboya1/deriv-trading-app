@@ -27,10 +27,10 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
   const [prices, setPrices] = useState<number[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState("R_10");
-  const socketRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<ReturnType<typeof connectDerivWS>>(null);
 
   useEffect(() => {
-    let socket: WebSocket | null = null;
+    let connection: ReturnType<typeof connectDerivWS> = null;
 
     const loadSocket = async () => {
       try {
@@ -41,11 +41,11 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
           return;
         }
 
-        socket = connectDerivWS(data.otp, (price) => {
+        connection = connectDerivWS(data.otp, (price) => {
           setCurrentPrice(price);
           setPrices((previous) => [...previous.slice(-49), price]);
         });
-        socketRef.current = socket;
+        socketRef.current = connection;
       } catch {
         // Ignore errors and keep the placeholder state.
       }
@@ -54,7 +54,7 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
     void loadSocket();
 
     return () => {
-      disconnectDerivWS(socket);
+      disconnectDerivWS(connection?.socket);
       socketRef.current = null;
     };
   }, []);
@@ -64,15 +64,18 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
   }, [onSymbolChange, selectedSymbol]);
 
   const handleSymbolChange = (symbol: string) => {
-    if (!socketRef.current) {
+    if (!socketRef.current?.socket) {
       setSelectedSymbol(symbol);
       setPrices([]);
       setCurrentPrice(null);
       return;
     }
 
-    socketRef.current.send(JSON.stringify({ forget_all: "ticks" }));
-    socketRef.current.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    // Update the tracking in the connection before sending new subscription
+    socketRef.current.setCurrentSymbol(symbol);
+
+    socketRef.current.socket.send(JSON.stringify({ forget_all: "ticks" }));
+    socketRef.current.socket.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
 
     setSelectedSymbol(symbol);
     setPrices([]);
