@@ -59,7 +59,6 @@ interface DerivSocketStore {
   balance: number | null;
   currency: string | null;
   portfolio: Record<number, OpenContract>;
-  openContracts: Record<number, ContractDetails>;
   auth: SocketAuthState;
   connect: () => Promise<void>;
   send: (payload: Record<string, unknown>) => void;
@@ -191,7 +190,6 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   balance: null,
   currency: null,
   portfolio: {},
-  openContracts: {},
   auth: {
     accessToken: null,
     accountId: null,
@@ -476,6 +474,25 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
     try {
       const contractObj = payload.proposal_open_contract as Record<string, unknown>;
       const contractId = contractObj.contract_id;
+
+      // ===== RAW RESPONSE LOGGING =====
+      console.log("[deriv-socket] RAW proposal_open_contract response:", {
+        contractId,
+        fullPayload: payload,
+        contractObjKeys: Object.keys(contractObj),
+        contractObj,
+        hasContractType: "contract_type" in contractObj,
+        contractTypeValue: contractObj.contract_type,
+        hasBuyPrice: "buy_price" in contractObj,
+        buyPriceValue: contractObj.buy_price,
+        hasProfit: "profit" in contractObj,
+        profitValue: contractObj.profit,
+        hasPayout: "payout" in contractObj,
+        payoutValue: contractObj.payout,
+        status: contractObj.status,
+        isExpired: contractObj.is_expired,
+      });
+      // ===== END RAW RESPONSE LOGGING =====
       const status = typeof contractObj.status === "string" ? contractObj.status : "";
       const isExpired =
         contractObj.is_expired === 1 || contractObj.is_expired === "1"
@@ -484,8 +501,8 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
       const subscriptionId = getSubscriptionId(payload);
 
       if (typeof contractId === "number") {
-        const currentOpenContracts = get().openContracts;
-        const existing = currentOpenContracts[contractId] || {};
+        const currentPortfolio = get().portfolio;
+        const existing = currentPortfolio[contractId] || {};
         const buyPriceValue = contractObj.buy_price ?? existing.buy_price ?? "0";
         const payoutValue = contractObj.payout ?? existing.payout ?? "0";
         const profitValue = contractObj.profit ?? existing.profit ?? "0";
@@ -494,21 +511,21 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
         const profit = typeof profitValue === "string" ? profitValue : String(profitValue);
         const contractType = typeof contractObj.contract_type === "string" ? contractObj.contract_type : existing.contract_type ?? "";
 
-        const nextContract: ContractDetails = {
+        const nextContract: OpenContract = {
           ...existing,
           ...contractObj,
           contract_id: contractId,
           contract_type: contractType,
-          buy_price: buyPrice,
-          payout,
-          profit,
-          status,
-          is_expired: isExpired,
-        };
+          buy_price: typeof buyPrice === "string" ? parseFloat(buyPrice) : buyPrice,
+          payout: typeof payout === "string" ? parseFloat(payout) : payout,
+          profit: typeof profit === "string" ? parseFloat(profit) : profit,
+          current_spot: typeof contractObj.current_spot === "number" ? contractObj.current_spot : existing.current_spot ?? 0,
+          is_sold: contractObj.is_sold === true || contractObj.is_sold === 1,
+        } as OpenContract;
 
         set((state: DerivSocketStore) => ({
-          openContracts: {
-            ...state.openContracts,
+          portfolio: {
+            ...state.portfolio,
             [contractId]: nextContract,
           },
         }));
