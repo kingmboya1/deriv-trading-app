@@ -30,7 +30,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const status = useDerivSocketStore((state) => state.status);
   const connect = useDerivSocketStore((state) => state.connect);
   const request = useDerivSocketStore((state) => state.request);
-  const accountCurrency = useDerivSocketStore((state) => state.auth.currency ?? state.currency);
+  const accountCurrency = useDerivSocketStore((state) => state.auth.currency);
   const [accountKind, setAccountKind] = useState<"real" | "demo" | "unknown">("unknown");
 
   // Duration validation rules per unit (Deriv constraints for binary options)

@@ -57,7 +57,6 @@ interface SocketAuthState {
 interface DerivSocketStore {
   status: ConnectionStatus;
   balance: number | null;
-  currency: string | null;
   portfolio: Record<number, OpenContract>;
   auth: SocketAuthState;
   connect: () => Promise<void>;
@@ -188,7 +187,6 @@ const fetchFreshWsUrl = async (): Promise<string> => {
 export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   status: "Disconnected",
   balance: null,
-  currency: null,
   portfolio: {},
   auth: {
     accessToken: null,
@@ -403,7 +401,7 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
     if ((typeof balanceValue === "number" || typeof balanceValue === "string") && typeof currency === "string") {
       const parsedBalance = Number.parseFloat(String(balanceValue));
       if (Number.isFinite(parsedBalance)) {
-        set({ balance: parsedBalance, currency });
+        set({ balance: parsedBalance });
         set((state: DerivSocketStore) => ({
           auth: {
             ...state.auth,
