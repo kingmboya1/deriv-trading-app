@@ -58,6 +58,11 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24,
     });
 
+    const preference =
+      request.cookies.get("deriv_account_preference")?.value === "demo"
+        ? "demo"
+        : "real";
+
     try {
       const accountsResponse = await fetch(
         "https://api.derivws.com/trading/v1/options/accounts",
@@ -74,12 +79,21 @@ export async function GET(request: NextRequest) {
         const accountsPayload = (await accountsResponse.json()) as {
           data?: Array<{ account_id?: string; account_type?: string }>;
         };
+
         const demoAccount = accountsPayload.data?.find(
           (account) => account.account_type === "demo"
         );
+        const realAccount = accountsPayload.data?.find(
+          (account) => account.account_type !== "demo"
+        );
 
-        if (demoAccount?.account_id) {
-          response.cookies.set("deriv_account_id", demoAccount.account_id, {
+        const chosenAccount =
+          preference === "demo"
+            ? demoAccount ?? realAccount
+            : realAccount ?? demoAccount;
+
+        if (chosenAccount?.account_id) {
+          response.cookies.set("deriv_account_id", chosenAccount.account_id, {
             path: "/",
             sameSite: "lax",
             maxAge: 60 * 60 * 24,

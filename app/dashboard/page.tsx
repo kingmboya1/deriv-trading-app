@@ -112,6 +112,7 @@ export default async function DashboardPage() {
   const balances = await fetchAccountBalances(token);
   const { realBalance, demoBalance } = balances;
   const wsUrl = await fetchWsUrl(token, accountId ?? "");
+  const connectedAccountType = wsUrl.includes("/demo") ? "demo" : wsUrl ? "real" : "unknown";
   console.log("[dashboard] wsUrl being passed to TradePanel", wsUrl);
 
   return (
@@ -128,7 +129,7 @@ export default async function DashboardPage() {
           </p>
         </header>
 
-        <BalanceBar realBalance={realBalance} demoBalance={demoBalance} wsUrl={wsUrl} connectedAccountType="demo" />
+        <BalanceBar realBalance={realBalance} demoBalance={demoBalance} connectedAccountType={connectedAccountType} />
 
         <MarketPanel wsUrl={wsUrl} />
 

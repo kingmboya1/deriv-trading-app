@@ -6,6 +6,17 @@ import { create, type StoreApi } from "zustand";
 // Type Definitions
 // ============================================================================
 
+export interface ContractDetails {
+  contract_id: number;
+  contract_type: string;
+  buy_price: string;
+  payout: string;
+  profit: string;
+  status: string;
+  is_expired: 0 | 1;
+  [key: string]: unknown;
+}
+
 export interface OpenContract {
   contract_id: number;
   contract_type: string;
@@ -48,6 +59,7 @@ interface DerivSocketStore {
   balance: number | null;
   currency: string | null;
   portfolio: Record<number, OpenContract>;
+  openContracts: Record<number, ContractDetails>;
   auth: SocketAuthState;
   connect: () => Promise<void>;
   send: (payload: Record<string, unknown>) => void;
@@ -66,6 +78,82 @@ let reconnectAttempts = 0;
 let reconnectTimer: number | null = null;
 const pendingRequests = new Map<number, PendingRequest>();
 let nextReqId = 1;
+const activeContractSubscriptions = new Map<number, number>();
+const recentlyBoughtContracts = new Set<number>();
+
+const getSubscriptionId = (payload: Record<string, unknown>): number | null => {
+  const subscription = payload.subscription;
+
+  if (!subscription || typeof subscription !== "object") {
+    return null;
+  }
+
+  const id = (subscription as Record<string, unknown>).id;
+  if (typeof id === "number") {
+    return id;
+  }
+
+  if (typeof id === "string") {
+    const numeric = Number(id);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  return null;
+};
+
+const forgetSubscription = (subscriptionId: number) => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  console.log("[deriv-socket] forgetting subscription", subscriptionId);
+  socket.send(JSON.stringify({ forget: subscriptionId }));
+};
+
+const subscribeToContract = (contractId: number) => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.warn("[deriv-socket] cannot subscribe to contract before socket is open", contractId);
+    return;
+  }
+
+  if (activeContractSubscriptions.has(contractId)) {
+    return;
+  }
+
+  // Log current auth/account at the moment of attempting subscription
+  try {
+    // `get` is available in the closure where subscribeToContract is used; if not, we still attempt to read via the exported hook
+    const authAccount = typeof (useDerivSocketStore as any) === "function" && (useDerivSocketStore as any).getState
+      ? (useDerivSocketStore as any).getState().auth.accountId
+      : null;
+    console.log("[deriv-socket] subscribing to proposal_open_contract", contractId, { authAccount });
+  } catch (e) {
+    console.log("[deriv-socket] subscribing to proposal_open_contract", contractId);
+  }
+
+  socket.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
+};
+
+const getContractAccountId = (contractObj: Record<string, unknown>): string | null => {
+  // Try common fields that might identify the account owning the contract
+  const byKey = (key: string) => {
+    const v = contractObj[key];
+    return typeof v === "string" ? v : null;
+  };
+
+  if (byKey("account_id")) return byKey("account_id");
+  if (byKey("loginid")) return byKey("loginid");
+  if (byKey("account")) {
+    const acct = contractObj["account"];
+    if (acct && typeof acct === "object") {
+      const a = acct as Record<string, unknown>;
+      if (typeof a.account_id === "string") return a.account_id;
+      if (typeof a.loginid === "string") return a.loginid;
+    }
+  }
+
+  return null;
+};
 
 // ============================================================================
 // Helper Functions
@@ -103,6 +191,7 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   balance: null,
   currency: null,
   portfolio: {},
+  openContracts: {},
   auth: {
     accessToken: null,
     accountId: null,
@@ -166,6 +255,14 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
     })),
 }));
 
+const markContractBought = (contractId: number) => {
+  recentlyBoughtContracts.add(contractId);
+  // Remove after a short grace period to avoid unbounded growth
+  window.setTimeout(() => recentlyBoughtContracts.delete(contractId), 60_000);
+};
+
+export { subscribeToContract, markContractBought };
+
 // ============================================================================
 // Socket Connection & Message Handling
 // ============================================================================
@@ -200,8 +297,8 @@ const connectSocket = (
     }
   });
 
-  newSocket.addEventListener("close", () => {
-    console.log("[deriv-socket] connection closed");
+  newSocket.addEventListener("close", (event: CloseEvent) => {
+    console.log("[deriv-socket] connection closed", { code: event.code, reason: event.reason });
     socket = null;
 
     if (reconnectAttempts >= 5) {
@@ -326,6 +423,7 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
     const portfolioObj = payload.portfolio as Record<string, unknown>;
 
     if (Array.isArray(portfolioObj.contracts)) {
+      console.log("PORTFOLIO_DEBUG:", portfolioObj.contracts);
       const contracts = portfolioObj.contracts as Record<string, unknown>[];
       const newPortfolio: Record<number, OpenContract> = {};
 
@@ -336,11 +434,103 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
 
           if (typeof contractId === "number") {
             newPortfolio[contractId] = contractObj as OpenContract;
+
+            // Only subscribe to contracts that belong to the currently authorized account
+            const contractOwner = getContractAccountId(contractObj);
+            const currentAccount = get().auth.accountId;
+
+            if (contractOwner === null) {
+              // If this contract was just bought in this session, allow subscription even without account metadata
+              if (recentlyBoughtContracts.has(contractId)) {
+                console.log('[deriv-socket] subscribing to recently-bought contract without account metadata', contractId);
+                subscribeToContract(contractId);
+              } else {
+                console.warn("[deriv-socket] contract has no account info; skipping subscribe", contractId, contractObj);
+              }
+            } else if (currentAccount && contractOwner !== currentAccount) {
+              console.log(
+                "[deriv-socket] skipping subscribe for contract from different account",
+                contractId,
+                { contractOwner, currentAccount }
+              );
+            } else {
+              subscribeToContract(contractId);
+            }
           }
         }
       }
 
       set({ portfolio: newPortfolio });
+    }
+
+    return;
+  }
+
+  // Handle live proposal_open_contract updates
+  if (payload.proposal_open_contract && typeof payload.proposal_open_contract === "object") {
+    if (payload.error) {
+      console.error("[deriv-socket] proposal_open_contract subscription error:", payload.error);
+      return;
+    }
+
+    try {
+      const contractObj = payload.proposal_open_contract as Record<string, unknown>;
+      const contractId = contractObj.contract_id;
+      const status = typeof contractObj.status === "string" ? contractObj.status : "";
+      const isExpired =
+        contractObj.is_expired === 1 || contractObj.is_expired === "1"
+          ? 1
+          : 0;
+      const subscriptionId = getSubscriptionId(payload);
+
+      if (typeof contractId === "number") {
+        const currentOpenContracts = get().openContracts;
+        const existing = currentOpenContracts[contractId] || {};
+        const buyPriceValue = contractObj.buy_price ?? existing.buy_price ?? "0";
+        const payoutValue = contractObj.payout ?? existing.payout ?? "0";
+        const profitValue = contractObj.profit ?? existing.profit ?? "0";
+        const buyPrice = typeof buyPriceValue === "string" ? buyPriceValue : String(buyPriceValue);
+        const payout = typeof payoutValue === "string" ? payoutValue : String(payoutValue);
+        const profit = typeof profitValue === "string" ? profitValue : String(profitValue);
+        const contractType = typeof contractObj.contract_type === "string" ? contractObj.contract_type : existing.contract_type ?? "";
+
+        const nextContract: ContractDetails = {
+          ...existing,
+          ...contractObj,
+          contract_id: contractId,
+          contract_type: contractType,
+          buy_price: buyPrice,
+          payout,
+          profit,
+          status,
+          is_expired: isExpired,
+        };
+
+        set((state: DerivSocketStore) => ({
+          openContracts: {
+            ...state.openContracts,
+            [contractId]: nextContract,
+          },
+        }));
+
+        if (subscriptionId !== null) {
+          activeContractSubscriptions.set(contractId, subscriptionId);
+        }
+
+        if (isExpired || status === "won" || status === "lost") {
+          if (subscriptionId !== null) {
+            forgetSubscription(subscriptionId);
+          } else {
+            const activeId = activeContractSubscriptions.get(contractId);
+            if (typeof activeId === "number") {
+              forgetSubscription(activeId);
+              activeContractSubscriptions.delete(contractId);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[deriv-socket] proposal_open_contract handler error', err, payload);
     }
 
     return;

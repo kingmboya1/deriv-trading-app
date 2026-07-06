@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useDerivSocketStore } from "@/lib/derivsocket";
+import { subscribeToContract, markContractBought, useDerivSocketStore } from "@/lib/derivsocket";
 interface TradePanelProps {
   symbol?: string;
   wsUrl?: string;
@@ -30,10 +30,38 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const connect = useDerivSocketStore((state) => state.connect);
   const request = useDerivSocketStore((state) => state.request);
   const accountCurrency = useDerivSocketStore((state) => state.auth.currency ?? state.currency);
+  const [accountKind, setAccountKind] = useState<"real" | "demo" | "unknown">("unknown");
 
   useEffect(() => {
     void connect();
   }, [connect]);
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/ws-token");
+        if (!mounted) return;
+        if (!res.ok) {
+          setAccountKind("unknown");
+          return;
+        }
+        const payload = (await res.json()) as { wsUrl?: string };
+        const wsUrl = payload.wsUrl;
+        if (typeof wsUrl === "string") {
+          setAccountKind(wsUrl.includes("/demo") ? "demo" : "real");
+        } else {
+          setAccountKind("unknown");
+        }
+      } catch {
+        if (!mounted) return;
+        setAccountKind("unknown");
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleTrade = async (contractType: "CALL" | "PUT") => {
     if (status !== "Connected") {
@@ -78,8 +106,52 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
       });
       const buy = buyResponse.buy;
 
+      // Log raw buy response and store auth at buy time for diagnosis
+      try {
+        const authState = (useDerivSocketStore as any).getState ? (useDerivSocketStore as any).getState().auth : null;
+        console.log("BUY_RESPONSE_RAW:", buyResponse, "authAtBuy:", authState);
+      } catch (e) {
+        console.log("BUY_RESPONSE_RAW:", buyResponse);
+      }
+
+      if (buy?.contract_id) {
+        // Mark as bought before subscribing so the portfolio loop won't skip it
+        try {
+          markContractBought(buy.contract_id);
+        } catch (e) {
+          // no-op
+        }
+
+        // Add a temporary portfolio entry so Recent Trades shows buy price/payout immediately
+        try {
+          const setState = (useDerivSocketStore as any).setState;
+          if (typeof setState === "function") {
+            const existing = (useDerivSocketStore as any).getState().portfolio || {};
+            const next = {
+              ...existing,
+              [buy.contract_id]: {
+                contract_id: buy.contract_id,
+                contract_type: "", // unknown until server updates, will be updated later
+                buy_price: buy.buy_price ?? null,
+                payout: buy.payout ?? null,
+                profit: null,
+              },
+            };
+
+            setState({ portfolio: next });
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        subscribeToContract(buy.contract_id);
+      }
+
+      const payoutNum = buy?.payout !== undefined && buy?.payout !== null ? Number(buy.payout) : NaN;
+      const payoutText = Number.isFinite(payoutNum) ? payoutNum.toFixed(2) : "-";
+
       setMessage(
-        `Bought ${contractType === "CALL" ? "Rise" : "Fall"} contract #${buy?.contract_id ?? "-"} for payout ${buy?.payout?.toFixed(2) ?? "-"}`
+        `Bought ${contractType === "CALL" ? "Rise" : "Fall"} contract #${buy?.contract_id ?? "-"} for payout ${payoutText}`
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Trade failed.");
@@ -90,19 +162,33 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Trade Panel</h2>
-        <span
-          className={`rounded-full px-3 py-1 text-sm ${
-            status === "Connected"
-              ? "bg-emerald-500/10 text-emerald-300"
-              : status === "Reconnecting..."
-                ? "bg-amber-500/10 text-amber-300"
-                : "bg-slate-800 text-slate-300"
-          }`}
-        >
-          {status}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-3 py-1 text-sm ${
+              status === "Connected"
+                ? "bg-emerald-500/10 text-emerald-300"
+                : status === "Reconnecting..."
+                  ? "bg-amber-500/10 text-amber-300"
+                  : "bg-slate-800 text-slate-300"
+            }`}
+          >
+            {status}
+          </span>
+          <span
+            className={`rounded-full px-3 py-1 text-sm ${
+              accountKind === "real"
+                ? "bg-emerald-500/10 text-emerald-300"
+                : accountKind === "demo"
+                  ? "bg-rose-500/10 text-rose-300"
+                  : "bg-slate-800 text-slate-300"
+            }`}
+            title={accountKind === "unknown" ? "Account type unknown" : `Using ${accountKind} account`}
+          >
+            {accountKind === "unknown" ? "ACCOUNT?" : accountKind.toUpperCase()}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4 space-y-3">

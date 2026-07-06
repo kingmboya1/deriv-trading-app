@@ -45,6 +45,12 @@ export default function LoginPage() {
     const { codeVerifier, codeChallenge } = await createPkcePair();
     const state = crypto.randomUUID();
 
+    const selectedAccountType = document.querySelector(
+      'input[name="accountType"]:checked'
+    ) as HTMLInputElement | null;
+    const preference = selectedAccountType?.value ?? "real";
+    setCookie("deriv_account_preference", preference, 60 * 60 * 24);
+
     setCookie("pkce_verifier", codeVerifier);
     setCookie("oauth_state", state);
 
@@ -72,6 +78,28 @@ export default function LoginPage() {
           This starter flow authenticates a user and prepares the dashboard for
           the next trading UI steps.
         </p>
+        <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-950 p-4">
+          <p className="mb-3 text-sm font-medium text-slate-200">Choose account type</p>
+          <label className="flex items-center gap-3 text-sm text-slate-300">
+            <input
+              type="radio"
+              name="accountType"
+              value="real"
+              defaultChecked
+              className="h-4 w-4 text-sky-500"
+            />
+            Real account
+          </label>
+          <label className="mt-2 flex items-center gap-3 text-sm text-slate-300">
+            <input
+              type="radio"
+              name="accountType"
+              value="demo"
+              className="h-4 w-4 text-sky-500"
+            />
+            Demo account
+          </label>
+        </div>
         <button
           type="button"
           onClick={handleLogin}
