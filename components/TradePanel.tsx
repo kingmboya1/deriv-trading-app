@@ -23,6 +23,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(1);
   const [durationUnit, setDurationUnit] = useState<"m" | "s">("m");
+  const [durationError, setDurationError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,6 +32,27 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const request = useDerivSocketStore((state) => state.request);
   const accountCurrency = useDerivSocketStore((state) => state.auth.currency ?? state.currency);
   const [accountKind, setAccountKind] = useState<"real" | "demo" | "unknown">("unknown");
+
+  // Duration validation rules per unit (Deriv constraints for binary options)
+  const durationRules = {
+    s: { min: 15, max: 3600, label: "15-3600 seconds" },
+    m: { min: 1, max: 1440, label: "1-1440 minutes" },
+  };
+
+  const validateDuration = (dur: number, unit: "m" | "s"): string | null => {
+    const rules = durationRules[unit];
+
+    if (dur < rules.min || dur > rules.max) {
+      return `Duration must be ${rules.label} for ${unit === "s" ? "seconds" : "minutes"}`;
+    }
+
+    return null;
+  };
+
+  const handleDurationBlur = () => {
+    const error = validateDuration(duration, durationUnit);
+    setDurationError(error);
+  };
 
   useEffect(() => {
     void connect();
@@ -69,8 +91,17 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
       return;
     }
 
+    // Validate duration before submitting
+    const durationValidationError = validateDuration(duration, durationUnit);
+    if (durationValidationError) {
+      setDurationError(durationValidationError);
+      setMessage(null);
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage(null);
+    setDurationError(null);
 
     const currency = accountCurrency?.toUpperCase();
 
@@ -212,16 +243,26 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
               min="1"
               step="1"
               value={duration}
-              onChange={(event) => setDuration(Number(event.target.value))}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+              onChange={(event) => {
+                setDuration(Number(event.target.value));
+                setDurationError(null);
+              }}
+              onBlur={handleDurationBlur}
+              className={`w-full rounded-xl border px-3 py-2 text-white bg-slate-950 ${
+                durationError ? "border-rose-500" : "border-slate-700"
+              }`}
             />
+            {durationError && <p className="mt-1 text-xs text-rose-400">{durationError}</p>}
           </label>
 
           <label className="w-24 text-sm text-slate-300">
             <span className="mb-1 block">Unit</span>
             <select
               value={durationUnit}
-              onChange={(event) => setDurationUnit(event.target.value as "m" | "s")}
+              onChange={(event) => {
+                setDurationUnit(event.target.value as "m" | "s");
+                setDurationError(null);
+              }}
               className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white"
             >
               <option value="m">m</option>
@@ -234,7 +275,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
           <button
             type="button"
             onClick={() => void handleTrade("CALL")}
-            disabled={isSubmitting || status !== "Connected"}
+            disabled={isSubmitting || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? "Placing..." : "Rise"}
@@ -242,7 +283,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
           <button
             type="button"
             onClick={() => void handleTrade("PUT")}
-            disabled={isSubmitting || status !== "Connected"}
+            disabled={isSubmitting || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? "Placing..." : "Fall"}
