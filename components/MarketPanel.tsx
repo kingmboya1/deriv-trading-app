@@ -14,7 +14,7 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
       <PriceChart onSymbolChange={setSelectedSymbol} />
-      <TradePanel symbol={selectedSymbol} />
+      <TradePanel symbol={selectedSymbol} wsUrl={wsUrl} />
     </div>
   );
 }

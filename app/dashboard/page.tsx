@@ -61,8 +61,8 @@ async function fetchAccountBalances(token: string): Promise<{ realBalance: numbe
     const accounts = apiResponse.data ?? [];
     const realAccount = accounts.find((account) => account.account_type === "real");
     const demoAccount = accounts.find((account) => account.account_type === "demo");
-    const realBalance = Number.parseFloat(realAccount?.balance?.toString() ?? "0");
-    const demoBalance = Number.parseFloat(demoAccount?.balance?.toString() ?? "0");
+    const realBalance = parseBalance(realAccount?.balance) ?? 0;
+    const demoBalance = parseBalance(demoAccount?.balance) ?? 0;
 
     return { realBalance, demoBalance };
   } catch {

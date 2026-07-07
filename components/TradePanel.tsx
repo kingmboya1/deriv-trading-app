@@ -137,44 +137,27 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
       });
       const buy = buyResponse.buy;
 
-      // Log raw buy response and store auth at buy time for diagnosis
-      try {
-        const authState = (useDerivSocketStore as any).getState ? (useDerivSocketStore as any).getState().auth : null;
-        console.log("BUY_RESPONSE_RAW:", buyResponse, "authAtBuy:", authState);
-      } catch (e) {
-        console.log("BUY_RESPONSE_RAW:", buyResponse);
-      }
+      const authState = useDerivSocketStore.getState().auth;
+      console.log("BUY_RESPONSE_RAW:", buyResponse, "authAtBuy:", authState);
 
       if (buy?.contract_id) {
-        // Mark as bought before subscribing so the portfolio loop won't skip it
-        try {
-          markContractBought(buy.contract_id);
-        } catch (e) {
-          // no-op
-        }
+        markContractBought(buy.contract_id);
 
-        // Add a temporary portfolio entry so Recent Trades shows buy price/payout immediately
-        try {
-          const setState = (useDerivSocketStore as any).setState;
-          if (typeof setState === "function") {
-            const existing = (useDerivSocketStore as any).getState().portfolio || {};
-            const next = {
-              ...existing,
-              [buy.contract_id]: {
-                contract_id: buy.contract_id,
-                contract_type: "", // unknown until server updates, will be updated later
-                buy_price: buy.buy_price ?? null,
-                payout: buy.payout ?? null,
-                profit: null,
-              },
-            };
+        const existing = useDerivSocketStore.getState().portfolio || {};
+        const next = {
+          ...existing,
+          [buy.contract_id]: {
+            contract_id: buy.contract_id,
+            contract_type: "", // unknown until server updates, will be updated later
+            buy_price: buy.buy_price ?? 0,
+            payout: buy.payout ?? 0,
+            profit: 0,
+            current_spot: 0,
+            is_sold: false,
+          },
+        };
 
-            setState({ portfolio: next });
-          }
-        } catch (e) {
-          // ignore
-        }
-
+        useDerivSocketStore.setState({ portfolio: next });
         subscribeToContract(buy.contract_id);
       }
 

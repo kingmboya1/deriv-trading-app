@@ -118,16 +118,8 @@ const subscribeToContract = (contractId: number) => {
     return;
   }
 
-  // Log current auth/account at the moment of attempting subscription
-  try {
-    // `get` is available in the closure where subscribeToContract is used; if not, we still attempt to read via the exported hook
-    const authAccount = typeof (useDerivSocketStore as any) === "function" && (useDerivSocketStore as any).getState
-      ? (useDerivSocketStore as any).getState().auth.accountId
-      : null;
-    console.log("[deriv-socket] subscribing to proposal_open_contract", contractId, { authAccount });
-  } catch (e) {
-    console.log("[deriv-socket] subscribing to proposal_open_contract", contractId);
-  }
+  const authAccount = useDerivSocketStore.getState().auth.accountId ?? null;
+  console.log("[deriv-socket] subscribing to proposal_open_contract", contractId, { authAccount });
 
   socket.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
 };
@@ -257,7 +249,101 @@ const markContractBought = (contractId: number) => {
   window.setTimeout(() => recentlyBoughtContracts.delete(contractId), 60_000);
 };
 
-export { subscribeToContract, markContractBought };
+interface SellContractResult {
+  success: boolean;
+  error?: string;
+  errorType?: "price_mismatch" | "contract_not_found" | "unknown";
+  profit?: number;
+  sellTime?: number;
+}
+
+const sellContract = async (contractId: number): Promise<SellContractResult> => {
+  const getState = useDerivSocketStore.getState;
+  const request = getState().request;
+  const portfolio = getState().portfolio;
+
+  // Get the current contract from portfolio
+  const contract = portfolio[contractId];
+
+  if (!contract) {
+    return {
+      success: false,
+      error: "Contract not found in portfolio",
+      errorType: "contract_not_found",
+    };
+  }
+
+  // Get bid price from contract (should be available from proposal_open_contract updates)
+  // For binary options, bid_price is typically the current sell price
+  const bidPrice = (contract as Record<string, unknown>).bid_price as number | undefined;
+
+  if (!bidPrice) {
+    return {
+      success: false,
+      error: "Current bid price not available. Please try again.",
+      errorType: "unknown",
+    };
+  }
+
+  try {
+    const sellResponse = await request<{ sell?: { status?: string; profit?: number; sell_time?: number }; error?: Record<string, unknown> }>({
+      sell: contractId,
+      price: bidPrice,
+    });
+
+    // Check for API errors
+    if (sellResponse.error) {
+      const errorObj = sellResponse.error as Record<string, unknown>;
+      const errorMessage = String(errorObj.message ?? "Sell request failed");
+
+      // Detect price mismatch errors (market moved)
+      if (
+        errorMessage.includes("price") ||
+        errorMessage.includes("bid") ||
+        errorMessage.includes("ask") ||
+        errorMessage.includes("mismatch")
+      ) {
+        return {
+          success: false,
+          error: "Price changed — please try again to get the current bid.",
+          errorType: "price_mismatch",
+        };
+      }
+
+      return {
+        success: false,
+        error: errorMessage,
+        errorType: "unknown",
+      };
+    }
+
+    // Success case
+    const sell = sellResponse.sell as Record<string, unknown> | undefined;
+    return {
+      success: true,
+      profit: typeof sell?.profit === "number" ? sell.profit : undefined,
+      sellTime: typeof sell?.sell_time === "number" ? sell.sell_time : undefined,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes("price")) {
+      return {
+        success: false,
+        error: "Price changed — please try again to get the current bid.",
+        errorType: "price_mismatch",
+      };
+    }
+
+    return {
+      success: false,
+      error: errorMessage,
+      errorType: "unknown",
+    };
+  }
+};
+
+export { subscribeToContract, markContractBought, sellContract };
 
 // ============================================================================
 // Socket Connection & Message Handling
