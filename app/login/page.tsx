@@ -33,9 +33,7 @@ function setCookie(name: string, value: string, maxAge = 60 * 60 * 24 * 7) {
 export default function LoginPage() {
   const handleLogin = async () => {
     const appId = process.env.NEXT_PUBLIC_DERIV_APP_ID ?? "";
-    const redirectUri =
-      process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI ??
-      "http://localhost:3000/api/auth/callback";
+    const redirectUri = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI || "http://localhost:3000/api/auth/callback";
 
     if (!appId) {
       window.alert("Missing NEXT_PUBLIC_DERIV_APP_ID");
