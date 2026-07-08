@@ -249,6 +249,39 @@ const markContractBought = (contractId: number) => {
   window.setTimeout(() => recentlyBoughtContracts.delete(contractId), 60_000);
 };
 
+const requestWithTimeout = async <T,>(
+  socketInstance: WebSocket,
+  payload: Record<string, unknown>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> => {
+  const reqId = nextReqId++;
+  const payloadWithId = { ...payload, req_id: reqId };
+
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      pendingRequests.delete(reqId);
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    pendingRequests.set(reqId, {
+      resolve: resolve as (value: unknown) => void,
+      reject: (reason?: Error) => {
+        window.clearTimeout(timeoutId);
+        reject(reason);
+      },
+    });
+
+    try {
+      socketInstance.send(JSON.stringify(payloadWithId));
+    } catch (error) {
+      pendingRequests.delete(reqId);
+      window.clearTimeout(timeoutId);
+      reject(error instanceof Error ? error : new Error("Failed to send request"));
+    }
+  });
+};
+
 interface SellContractResult {
   success: boolean;
   error?: string;
@@ -286,10 +319,23 @@ const sellContract = async (contractId: number): Promise<SellContractResult> => 
   }
 
   try {
-    const sellResponse = await request<{ sell?: { status?: string; profit?: number; sell_time?: number }; error?: Record<string, unknown> }>({
-      sell: contractId,
-      price: bidPrice,
-    });
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return {
+        success: false,
+        error: "WebSocket is not connected",
+        errorType: "unknown",
+      };
+    }
+
+    const sellResponse = await requestWithTimeout<{ sell?: { status?: string; profit?: number; sell_time?: number }; error?: Record<string, unknown> }>(
+      socket,
+      {
+        sell: contractId,
+        price: bidPrice,
+      },
+      15_000,
+      "Sell request timed out — please try again"
+    );
 
     // Check for API errors
     if (sellResponse.error) {

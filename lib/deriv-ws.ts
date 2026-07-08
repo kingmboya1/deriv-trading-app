@@ -90,7 +90,12 @@ export function connectDerivWS(
 }
 
 export function disconnectDerivWS(socket: WebSocket | null | undefined) {
-  if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+  if (
+    !socket ||
+    socket.readyState === WebSocket.CLOSED ||
+    socket.readyState === WebSocket.CLOSING ||
+    socket.readyState === WebSocket.CONNECTING
+  ) {
     return;
   }
 

@@ -25,13 +25,33 @@ const symbolLabels: Record<string, string> = {
   R_100: "Volatility 100 Index",
 };
 
+function getAccountIdentity(wsUrl?: string): string {
+  const accountIdCookie = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("deriv_account_id="))
+    ?.split("=")[1];
+  const accountPreferenceCookie = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("deriv_account_preference="))
+    ?.split("=")[1];
+  const normalizedAccountId = accountIdCookie ? decodeURIComponent(accountIdCookie) : "unknown";
+  const accountType =
+    accountPreferenceCookie === "demo" || (wsUrl && wsUrl.includes("/demo"))
+      ? "demo"
+      : accountPreferenceCookie === "real" || (wsUrl && !wsUrl.includes("/demo"))
+        ? "real"
+        : "unknown";
+
+  return `${accountType}:${normalizedAccountId}`;
+}
+
 export function PriceChart({ onSymbolChange }: PriceChartProps) {
   const [prices, setPrices] = useState<number[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState("R_10");
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const socketRef = useRef<ReturnType<typeof connectDerivWS>>(null);
-  const activeWsUrlRef = useRef<string | null>(null);
+  const activeAccountIdentityRef = useRef<string | null>(null);
 
   useEffect(() => {
     const loadSocket = async () => {
@@ -45,16 +65,23 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
         }
 
         const nextWsUrl = data.wsUrl;
+        const nextAccountIdentity = getAccountIdentity(nextWsUrl);
         const currentSocket = socketRef.current?.socket;
-        const socketIsLive =
-          currentSocket &&
-          (currentSocket.readyState === WebSocket.OPEN || currentSocket.readyState === WebSocket.CONNECTING);
+        const socketIsOpen = currentSocket && currentSocket.readyState === WebSocket.OPEN;
+        const socketIsConnecting = currentSocket && currentSocket.readyState === WebSocket.CONNECTING;
 
-        if (socketIsLive && activeWsUrlRef.current === nextWsUrl) {
+        if (socketIsOpen && activeAccountIdentityRef.current === nextAccountIdentity) {
           return;
         }
 
-        disconnectDerivWS(currentSocket);
+        if (socketIsConnecting) {
+          return;
+        }
+
+        if (socketIsOpen) {
+          disconnectDerivWS(currentSocket);
+        }
+
         socketRef.current = connectDerivWS(
           data.otp,
           (price) => {
@@ -66,7 +93,7 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
             onStatusChange: setConnectionStatus,
           }
         );
-        activeWsUrlRef.current = nextWsUrl;
+        activeAccountIdentityRef.current = nextAccountIdentity;
       } catch {
         setConnectionStatus("failed");
       }
@@ -95,7 +122,7 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
       window.clearInterval(intervalId);
       disconnectDerivWS(socketRef.current?.socket);
       socketRef.current = null;
-      activeWsUrlRef.current = null;
+      activeAccountIdentityRef.current = null;
     };
   }, []);
 

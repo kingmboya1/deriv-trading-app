@@ -156,6 +156,7 @@ export default function Portfolio() {
                       {typeof contractId === "number" && bidPrice !== null ? (
                         <button
                           onClick={() => handleSellClick(contractId, bidPrice, profit ?? 0)}
+                          disabled={sellLoading}
                           className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
                         >
                           Sell
@@ -223,7 +224,7 @@ export default function Portfolio() {
             </div>
 
             <div className="mt-6 flex gap-3">
-              {sellError && sellErrorType === "price_mismatch" ? (
+              {sellError ? (
                 <>
                   <button
                     onClick={handleRetry}
