@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { subscribeToContract, markContractBought, useDerivSocketStore } from "@/lib/derivsocket";
+import { subscribeToContract, useDerivSocketStore } from "@/lib/derivsocket";
 interface TradePanelProps {
   symbol?: string;
   wsUrl?: string;
@@ -141,8 +141,6 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
       console.log("BUY_RESPONSE_RAW:", buyResponse, "authAtBuy:", authState);
 
       if (buy?.contract_id) {
-        markContractBought(buy.contract_id);
-
         const existing = useDerivSocketStore.getState().portfolio || {};
         const next = {
           ...existing,

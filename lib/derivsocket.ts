@@ -77,7 +77,7 @@ let reconnectTimer: number | null = null;
 const pendingRequests = new Map<number, PendingRequest>();
 let nextReqId = 1;
 const activeContractSubscriptions = new Map<number, number>();
-const recentlyBoughtContracts = new Set<number>();
+let activeAccountIdentity: string | null = null;
 
 const getSubscriptionId = (payload: Record<string, unknown>): number | null => {
   const subscription = payload.subscription;
@@ -124,27 +124,6 @@ const subscribeToContract = (contractId: number) => {
   socket.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
 };
 
-const getContractAccountId = (contractObj: Record<string, unknown>): string | null => {
-  // Try common fields that might identify the account owning the contract
-  const byKey = (key: string) => {
-    const v = contractObj[key];
-    return typeof v === "string" ? v : null;
-  };
-
-  if (byKey("account_id")) return byKey("account_id");
-  if (byKey("loginid")) return byKey("loginid");
-  if (byKey("account")) {
-    const acct = contractObj["account"];
-    if (acct && typeof acct === "object") {
-      const a = acct as Record<string, unknown>;
-      if (typeof a.account_id === "string") return a.account_id;
-      if (typeof a.loginid === "string") return a.loginid;
-    }
-  }
-
-  return null;
-};
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -170,6 +149,44 @@ const fetchFreshWsUrl = async (): Promise<string> => {
   }
 
   return payload.wsUrl;
+};
+
+const getCookieValue = (name: string): string | null => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  if (!cookie) {
+    return null;
+  }
+
+  return decodeURIComponent(cookie.split("=")[1] ?? "");
+};
+
+const getAccountIdentityFromWsUrl = (wsUrl: string): string => {
+  const accountId = getCookieValue("deriv_account_id") ?? "unknown";
+  const accountPreference = getCookieValue("deriv_account_preference");
+  const accountType = wsUrl.includes("/demo") ? "demo" : "real";
+  const resolvedType = accountPreference === "demo" ? "demo" : accountPreference === "real" ? "real" : accountType;
+
+  return `${resolvedType}:${accountId}`;
+};
+
+const resetAccountScopedState = (set: DerivSocketSet) => {
+  set((state: DerivSocketStore) => ({
+    ...state,
+    balance: null,
+    portfolio: {},
+    auth: {
+      accessToken: null,
+      accountId: null,
+      currency: null,
+    },
+  }));
 };
 
 // ============================================================================
@@ -242,12 +259,6 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
       },
     })),
 }));
-
-const markContractBought = (contractId: number) => {
-  recentlyBoughtContracts.add(contractId);
-  // Remove after a short grace period to avoid unbounded growth
-  window.setTimeout(() => recentlyBoughtContracts.delete(contractId), 60_000);
-};
 
 const requestWithTimeout = async <T,>(
   socketInstance: WebSocket,
@@ -389,7 +400,7 @@ const sellContract = async (contractId: number): Promise<SellContractResult> => 
   }
 };
 
-export { subscribeToContract, markContractBought, sellContract };
+export { subscribeToContract, sellContract };
 
 // ============================================================================
 // Socket Connection & Message Handling
@@ -401,6 +412,12 @@ const connectSocket = (
   get: () => DerivSocketStore
 ) => {
   clearReconnectTimer();
+
+  const nextAccountIdentity = getAccountIdentityFromWsUrl(wsUrl);
+  if (activeAccountIdentity !== null && activeAccountIdentity !== nextAccountIdentity) {
+    resetAccountScopedState(set);
+  }
+  activeAccountIdentity = nextAccountIdentity;
 
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     socket.close();
@@ -562,28 +579,7 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
 
           if (typeof contractId === "number") {
             newPortfolio[contractId] = contractObj as OpenContract;
-
-            // Only subscribe to contracts that belong to the currently authorized account
-            const contractOwner = getContractAccountId(contractObj);
-            const currentAccount = get().auth.accountId;
-
-            if (contractOwner === null) {
-              // If this contract was just bought in this session, allow subscription even without account metadata
-              if (recentlyBoughtContracts.has(contractId)) {
-                console.log('[deriv-socket] subscribing to recently-bought contract without account metadata', contractId);
-                subscribeToContract(contractId);
-              } else {
-                console.warn("[deriv-socket] contract has no account info; skipping subscribe", contractId, contractObj);
-              }
-            } else if (currentAccount && contractOwner !== currentAccount) {
-              console.log(
-                "[deriv-socket] skipping subscribe for contract from different account",
-                contractId,
-                { contractOwner, currentAccount }
-              );
-            } else {
-              subscribeToContract(contractId);
-            }
+            subscribeToContract(contractId);
           }
         }
       }
