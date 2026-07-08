@@ -62,7 +62,7 @@ export default function Portfolio() {
   const connect = useDerivSocketStore((state) => state.connect);
   const portfolio = useDerivSocketStore((state) => state.portfolio);
   const [confirmSellModal, setConfirmSellModal] = useState<{ contractId: number; bidPrice: number; currentProfit: number } | null>(null);
-  const [sellLoading, setSellLoading] = useState(false);
+  const [pendingSellContractIds, setPendingSellContractIds] = useState<number[]>([]);
   const [sellError, setSellError] = useState<string | null>(null);
   const [sellErrorType, setSellErrorType] = useState<"price_mismatch" | "contract_not_found" | "unknown" | null>(null);
 
@@ -81,18 +81,17 @@ export default function Portfolio() {
   const handleConfirmSell = async () => {
     if (!confirmSellModal) return;
 
-    setSellLoading(true);
+    const contractId = confirmSellModal.contractId;
+    setPendingSellContractIds((previous) => (previous.includes(contractId) ? previous : [...previous, contractId]));
     setSellError(null);
     setSellErrorType(null);
 
     try {
-      const result = await sellContract(confirmSellModal.contractId);
+      const result = await sellContract(contractId);
 
       if (!result.success) {
         setSellError(result.error ?? "Sell request failed");
         setSellErrorType(result.errorType ?? "unknown");
-        setSellLoading(false);
-        // Keep modal open so user can retry
         return;
       }
 
@@ -101,7 +100,8 @@ export default function Portfolio() {
     } catch (error) {
       setSellError(error instanceof Error ? error.message : "Unknown error");
       setSellErrorType("unknown");
-      setSellLoading(false);
+    } finally {
+      setPendingSellContractIds((previous) => previous.filter((id) => id !== contractId));
     }
   };
 
@@ -110,6 +110,10 @@ export default function Portfolio() {
     setSellErrorType(null);
     // Modal stays open for retry
   };
+
+  const isCurrentContractSelling = confirmSellModal
+    ? pendingSellContractIds.includes(confirmSellModal.contractId)
+    : false;
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
@@ -144,6 +148,7 @@ export default function Portfolio() {
                 const profit = parseNumber(trade.profit ?? trade.profit_loss ?? trade.profitLoss);
                 const contractId = trade.contract_id ?? trade.contractId ?? trade.id;
                 const bidPrice = parseNumber((trade as Record<string, unknown>).bid_price);
+                const isThisContractSelling = typeof contractId === "number" && pendingSellContractIds.includes(contractId);
 
                 return (
                   <tr key={`${contractId}-${index}`} className="border-b border-slate-800 text-slate-200">
@@ -156,7 +161,7 @@ export default function Portfolio() {
                       {typeof contractId === "number" && bidPrice !== null ? (
                         <button
                           onClick={() => handleSellClick(contractId, bidPrice, profit ?? 0)}
-                          disabled={sellLoading}
+                          disabled={isThisContractSelling}
                           className="rounded-lg bg-amber-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
                         >
                           Sell
@@ -228,14 +233,14 @@ export default function Portfolio() {
                 <>
                   <button
                     onClick={handleRetry}
-                    disabled={sellLoading}
+                    disabled={isCurrentContractSelling}
                     className="flex-1 rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
                   >
-                    {sellLoading ? "Retrying..." : "Retry"}
+                    {isCurrentContractSelling ? "Retrying..." : "Retry"}
                   </button>
                   <button
                     onClick={() => setConfirmSellModal(null)}
-                    disabled={sellLoading}
+                    disabled={isCurrentContractSelling}
                     className="flex-1 rounded-lg border border-slate-600 px-4 py-2 font-semibold text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
                   >
                     Cancel
@@ -245,14 +250,14 @@ export default function Portfolio() {
                 <>
                   <button
                     onClick={handleConfirmSell}
-                    disabled={sellLoading}
+                    disabled={isCurrentContractSelling}
                     className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
                   >
-                    {sellLoading ? "Selling..." : "Confirm Sell"}
+                    {isCurrentContractSelling ? "Selling..." : "Confirm Sell"}
                   </button>
                   <button
                     onClick={() => setConfirmSellModal(null)}
-                    disabled={sellLoading}
+                    disabled={isCurrentContractSelling}
                     className="flex-1 rounded-lg border border-slate-600 px-4 py-2 font-semibold text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
                   >
                     Cancel
