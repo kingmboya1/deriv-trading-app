@@ -50,7 +50,7 @@ export function OffsetBarrierInput({
         />
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Enter a relative price offset from the current spot, e.g. +0.01 or -0.01.
+        Enter a relative price offset from the current spot, e.g. +1 or -1.
       </p>
       {spotValue !== null ? (
         <p className="mt-1 text-xs text-slate-400">

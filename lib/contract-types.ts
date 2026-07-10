@@ -108,7 +108,7 @@ export const CONTRACT_TYPES: Record<TradeMode, ContractTypeConfig> = {
       min: -999999,
       max: 999999,
       step: 0.01,
-      placeholder: "+0.01",
+      placeholder: "+1",
     },
   },
 };
@@ -175,7 +175,7 @@ export const validateBarrier = (
 
   if (barrier.kind === "offset") {
     if (!OFFSET_PATTERN.test(value.trim())) {
-      return "Barrier must be a valid offset like +0.01 or -0.01.";
+      return "Barrier must be a valid offset like +1 or -1.";
     }
     return null;
   }
