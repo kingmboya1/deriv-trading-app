@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useDerivSocketStore, sellContract } from "@/lib/derivsocket";
+import { useDerivSocketStore, sellContract, isContractSettled } from "@/lib/derivsocket";
 
 type TradeRecord = {
   contract_id?: number | string;
@@ -66,11 +66,28 @@ export default function Portfolio() {
   const [sellError, setSellError] = useState<string | null>(null);
   const [sellErrorType, setSellErrorType] = useState<"price_mismatch" | "contract_not_found" | "unknown" | null>(null);
 
+  const trades = Object.values(portfolio) as TradeRecord[];
+
   useEffect(() => {
     void connect();
   }, [connect]);
 
-  const trades = Object.values(portfolio) as TradeRecord[];
+  useEffect(() => {
+    if (!confirmSellModal) {
+      return;
+    }
+
+    const matchingTrade = trades.find((trade) => {
+      const contractId = trade.contract_id ?? trade.contractId ?? trade.id;
+      return typeof contractId === "number" && contractId === confirmSellModal.contractId;
+    });
+
+    if (matchingTrade && isContractSettled(matchingTrade)) {
+      setConfirmSellModal(null);
+      setSellError(null);
+      setSellErrorType(null);
+    }
+  }, [confirmSellModal, trades]);
 
   const handleSellClick = (contractId: number, bidPrice: number, currentProfit: number) => {
     setSellError(null);
@@ -148,6 +165,8 @@ export default function Portfolio() {
                 const profit = parseNumber(trade.profit ?? trade.profit_loss ?? trade.profitLoss);
                 const contractId = trade.contract_id ?? trade.contractId ?? trade.id;
                 const bidPrice = parseNumber((trade as Record<string, unknown>).bid_price);
+                const isContractClosed = isContractSettled(trade);
+                const canSell = typeof contractId === "number" && bidPrice !== null && bidPrice > 0 && !isContractClosed;
                 const isThisContractSelling = typeof contractId === "number" && pendingSellContractIds.includes(contractId);
 
                 return (
@@ -158,7 +177,7 @@ export default function Portfolio() {
                     <td className="px-3 py-2">{formatCurrency(payout)}</td>
                     <td className="px-3 py-2">{formatCurrency(profit)}</td>
                     <td className="px-3 py-2">
-                      {typeof contractId === "number" && bidPrice !== null ? (
+                      {canSell ? (
                         <button
                           onClick={() => handleSellClick(contractId, bidPrice, profit ?? 0)}
                           disabled={isThisContractSelling}
@@ -167,7 +186,7 @@ export default function Portfolio() {
                           Sell
                         </button>
                       ) : (
-                        <span className="text-xs text-slate-400">-</span>
+                        <span className="text-xs text-slate-400">{isContractClosed ? "Settled" : "-"}</span>
                       )}
                     </td>
                   </tr>

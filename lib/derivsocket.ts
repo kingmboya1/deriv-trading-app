@@ -25,6 +25,8 @@ export interface OpenContract {
   profit: number;
   current_spot: number;
   is_sold: boolean;
+  is_expired?: 0 | 1;
+  status?: string;
   sell_time?: number;
   purchase_time?: number;
   [key: string]: unknown;
@@ -66,6 +68,35 @@ interface DerivSocketStore {
 }
 
 type DerivSocketSet = StoreApi<DerivSocketStore>["setState"];
+
+const normalizeBooleanFlag = (value: unknown): boolean => value === true || value === 1 || value === "1";
+
+export const isContractSettled = (contract: Partial<OpenContract> | Record<string, unknown>): boolean => {
+  if (normalizeBooleanFlag((contract as Record<string, unknown>).is_sold)) {
+    return true;
+  }
+
+  if (normalizeBooleanFlag((contract as Record<string, unknown>).is_expired)) {
+    return true;
+  }
+
+  if (typeof (contract as Record<string, unknown>).sell_time === "number") {
+    return true;
+  }
+
+  const statusValue = (contract as Record<string, unknown>).status;
+  const status = typeof statusValue === "string" ? statusValue.toLowerCase() : "";
+
+  return ["won", "lost", "sold", "expired", "settled", "closed"].includes(status);
+};
+
+export const isContractSellable = (contract: Partial<OpenContract> | Record<string, unknown>): boolean => {
+  if (!isContractSettled(contract)) {
+    return true;
+  }
+
+  return false;
+};
 
 // ============================================================================
 // Module-Level Variables (outside store, no re-renders triggered)
@@ -646,7 +677,9 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
           payout: typeof payout === "string" ? parseFloat(payout) : payout,
           profit: typeof profit === "string" ? parseFloat(profit) : profit,
           current_spot: typeof contractObj.current_spot === "number" ? contractObj.current_spot : existing.current_spot ?? 0,
-          is_sold: contractObj.is_sold === true || contractObj.is_sold === 1,
+          is_sold: normalizeBooleanFlag(contractObj.is_sold),
+          is_expired: normalizeBooleanFlag(contractObj.is_expired) ? 1 : 0,
+          status: typeof contractObj.status === "string" ? contractObj.status : existing.status,
         } as OpenContract;
 
         set((state: DerivSocketStore) => ({
@@ -688,17 +721,23 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
 
     if (typeof contractId === "number") {
       const currentPortfolio = get().portfolio;
+      const updatedPortfolio = { ...currentPortfolio };
+      const existing = updatedPortfolio[contractId] || {};
 
       if (action === "sell" || isSold === true || isSold === 1) {
-        // Delete the contract from portfolio
-        const updatedPortfolio = { ...currentPortfolio };
+        // Remove sold contracts from the active portfolio view.
         delete updatedPortfolio[contractId];
         set({ portfolio: updatedPortfolio });
       } else {
-        // Merge transaction fields into existing entry or create new one
-        const updatedPortfolio = { ...currentPortfolio };
-        const existing = updatedPortfolio[contractId] || {};
-        updatedPortfolio[contractId] = { ...existing, ...transaction } as OpenContract;
+        const normalizedTransaction = {
+          ...existing,
+          ...transaction,
+          is_sold: normalizeBooleanFlag(transaction.is_sold),
+          is_expired: normalizeBooleanFlag(transaction.is_expired) ? 1 : 0,
+          status: typeof transaction.status === "string" ? transaction.status : existing.status,
+        } as OpenContract;
+
+        updatedPortfolio[contractId] = normalizedTransaction;
         set({ portfolio: updatedPortfolio });
       }
     }
