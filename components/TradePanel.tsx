@@ -15,7 +15,7 @@ interface TradePanelProps {
   wsUrl?: string;
 }
 
-type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD";
+type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER";
 
 type ProposalResponse = {
   id?: string;
@@ -38,6 +38,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const [barrierError, setBarrierError] = useState<string | null>(null);
   const [durationError, setDurationError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<"success" | "error" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const status = useDerivSocketStore((state) => state.status);
@@ -120,7 +121,9 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
 
     setIsSubmitting(true);
     setMessage(null);
+    setMessageType(null);
     setDurationError(null);
+    setBarrierError(null);
 
     const currency = accountCurrency?.toUpperCase();
 
@@ -131,7 +134,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
     }
 
     try {
-      const proposalPayload = {
+      const proposalPayload: Record<string, unknown> = {
         proposal: 1,
         amount: Number(stake),
         basis: "stake",
@@ -142,6 +145,10 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
         underlying_symbol: symbol,
         subscribe: 1,
       };
+
+      if (currentContract.barrier) {
+        proposalPayload.barrier = Number(barrier);
+      }
 
       const proposalResponse = await request<{ proposal?: ProposalResponse }>(proposalPayload);
       const proposal = proposalResponse.proposal;
@@ -192,8 +199,10 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
       setMessage(
         `Bought ${verb} contract #${buy?.contract_id ?? "-"} for payout ${payoutText}`
       );
+      setMessageType("success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Trade failed.");
+      setMessageType("error");
     } finally {
       setIsSubmitting(false);
     }
@@ -252,6 +261,17 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
           }`}
         >
           Even/Odd
+        </button>
+        <button
+          type="button"
+          onClick={() => setTradeMode("OVER_UNDER")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            tradeMode === "OVER_UNDER"
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          Over/Under
         </button>
       </div>
 
@@ -324,28 +344,30 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={() =>
-              void handleTrade(tradeMode === "EVEN_ODD" ? "DIGITEVEN" : "CALL")
-            }
+            onClick={() => void handleTrade(currentContract.contractTypes[0])}
             disabled={isSubmitting || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSubmitting ? "Placing..." : tradeMode === "EVEN_ODD" ? "Even" : "Rise"}
+            {isSubmitting ? "Placing..." : currentContract.buttonLabels[0]}
           </button>
           <button
             type="button"
-            onClick={() =>
-              void handleTrade(tradeMode === "EVEN_ODD" ? "DIGITODD" : "PUT")
-            }
+            onClick={() => void handleTrade(currentContract.contractTypes[1])}
             disabled={isSubmitting || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSubmitting ? "Placing..." : tradeMode === "EVEN_ODD" ? "Odd" : "Fall"}
+            {isSubmitting ? "Placing..." : currentContract.buttonLabels[1]}
           </button>
         </div>
 
         {message ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-slate-300">
+          <div
+            className={`rounded-xl border p-3 text-sm ${
+              messageType === "error"
+                ? "border-rose-700 bg-rose-950 text-rose-200"
+                : "border-emerald-700 bg-emerald-950 text-emerald-200"
+            }`}
+          >
             {message}
           </div>
         ) : null}
