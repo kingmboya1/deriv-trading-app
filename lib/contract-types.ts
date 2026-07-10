@@ -1,8 +1,8 @@
 export type DurationUnit = "m" | "s" | "t";
 export type DurationKind = "time" | "tick";
 export type BarrierKind = "digit" | "offset";
-export type TradeMode = "RISE_FALL" | "EVEN_ODD" | "OVER_UNDER" | "MATCHES_DIFFERS";
-export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER" | "DIGITMATCH" | "DIGITDIFF";
+export type TradeMode = "RISE_FALL" | "EVEN_ODD" | "OVER_UNDER" | "MATCHES_DIFFERS" | "HIGHER_LOWER";
+export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER" | "DIGITMATCH" | "DIGITDIFF" | "HIGHER" | "LOWER";
 
 export interface DurationConfig {
   kind: DurationKind;
@@ -91,6 +91,26 @@ export const CONTRACT_TYPES: Record<TradeMode, ContractTypeConfig> = {
       placeholder: "0-9",
     },
   },
+  HIGHER_LOWER: {
+    id: "HIGHER_LOWER",
+    label: "Higher/Lower",
+    buttonLabels: ["Higher", "Lower"],
+    contractTypes: ["HIGHER", "LOWER"],
+    duration: {
+      kind: "time",
+      units: ["m", "s"],
+      time: { min: 1, max: 1440, label: "1-1440 minutes" },
+      tick: { min: 1, max: 10, label: "1-10 ticks" },
+    },
+    barrier: {
+      kind: "offset",
+      label: "Barrier offset",
+      min: -999999,
+      max: 999999,
+      step: 0.01,
+      placeholder: "+0.01",
+    },
+  },
 };
 
 export const DEFAULT_TRADE_MODE: TradeMode = "RISE_FALL";
@@ -125,6 +145,8 @@ export const validateDuration = (
   return null;
 };
 
+const OFFSET_PATTERN = /^(?=.{1,20}$)[+-]?[0-9]+(?:\.[0-9]*)?$/;
+
 export const validateBarrier = (
   value: string,
   barrier?: BarrierConfig
@@ -137,18 +159,25 @@ export const validateBarrier = (
     return "Barrier is required for this contract type.";
   }
 
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "Barrier must be a valid number.";
-  }
-
   if (barrier.kind === "digit") {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return "Barrier must be a valid number.";
+    }
     if (!Number.isInteger(numeric)) {
       return "Barrier must be a whole digit.";
     }
     if (numeric < barrier.min || numeric > barrier.max) {
       return `Barrier must be between ${barrier.min} and ${barrier.max}.`;
     }
+    return null;
+  }
+
+  if (barrier.kind === "offset") {
+    if (!OFFSET_PATTERN.test(value.trim())) {
+      return "Barrier must be a valid offset like +0.01 or -0.01.";
+    }
+    return null;
   }
 
   return null;

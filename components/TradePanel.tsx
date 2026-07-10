@@ -11,9 +11,10 @@ import {
   validateDuration,
 } from "@/lib/contract-types";
 import { BarrierInput } from "@/components/BarrierInput";
+import { OffsetBarrierInput } from "@/components/OffsetBarrierInput";
 interface TradePanelProps {
   symbol?: string;
-  wsUrl?: string;
+  currentSpot?: number | null;
 }
 
 type ProposalResponse = {
@@ -28,7 +29,7 @@ type BuyResponse = {
   payout?: number;
 };
 
-export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
+export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(1);
   const [durationUnit, setDurationUnit] = useState<"m" | "s" | "t">("m");
@@ -146,7 +147,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
       };
 
       if (currentContract.barrier) {
-        proposalPayload.barrier = Number(barrier);
+        proposalPayload.barrier = barrier.trim();
       }
 
       const proposalResponse = await request<{ proposal?: ProposalResponse }>(proposalPayload);
@@ -191,9 +192,23 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
           ? "Rise"
           : contractType === "PUT"
           ? "Fall"
+          : contractType === "HIGHER"
+          ? "Higher"
+          : contractType === "LOWER"
+          ? "Lower"
           : contractType === "DIGITEVEN"
           ? "Even"
-          : "Odd";
+          : contractType === "DIGITODD"
+          ? "Odd"
+          : contractType === "DIGITOVER"
+          ? "Over"
+          : contractType === "DIGITUNDER"
+          ? "Under"
+          : contractType === "DIGITMATCH"
+          ? "Matches"
+          : contractType === "DIGITDIFF"
+          ? "Differs"
+          : "Trade";
 
       setMessage(
         `Bought ${verb} contract #${buy?.contract_id ?? "-"} for payout ${payoutText}`
@@ -283,6 +298,17 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
         >
           Matches/Differs
         </button>
+        <button
+          type="button"
+          onClick={() => setTradeMode("HIGHER_LOWER")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            tradeMode === "HIGHER_LOWER"
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          Higher/Lower
+        </button>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -340,21 +366,37 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
           </label>
         </div>
 
-        <BarrierInput
-          contractConfig={currentContract}
-          value={barrier}
-          onChange={(value) => {
-            setBarrier(value);
-            setBarrierError(null);
-          }}
-          onBlur={handleBarrierBlur}
-          error={barrierError}
-        />
-        {currentContract.barrier ? (
-          <p className="text-xs text-slate-500">
-            Digit barrier rules are validated by Deriv during proposal submission. Any invalid value will return a server error.
-          </p>
-        ) : null}
+        {currentContract.barrier?.kind === "offset" ? (
+          <OffsetBarrierInput
+            barrier={currentContract.barrier}
+            value={barrier}
+            onChange={(value) => {
+              setBarrier(value);
+              setBarrierError(null);
+            }}
+            onBlur={handleBarrierBlur}
+            error={barrierError}
+            currentSpot={currentSpot ?? null}
+          />
+        ) : (
+          <>
+            <BarrierInput
+              contractConfig={currentContract}
+              value={barrier}
+              onChange={(value) => {
+                setBarrier(value);
+                setBarrierError(null);
+              }}
+              onBlur={handleBarrierBlur}
+              error={barrierError}
+            />
+            {currentContract.barrier ? (
+              <p className="text-xs text-slate-500">
+                Digit barrier rules are validated by Deriv during proposal submission. Any invalid value will return a server error.
+              </p>
+            ) : null}
+          </>
+        )}
 
         <div className="flex gap-3">
           <button

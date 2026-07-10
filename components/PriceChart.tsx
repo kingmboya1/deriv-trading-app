@@ -14,6 +14,7 @@ type ConnectionStatus = "connecting" | "connected" | "failed" | "closed";
 
 interface PriceChartProps {
   onSymbolChange?: (symbol: string) => void;
+  onSpotChange?: (spot: number | null) => void;
 }
 
 const symbols = ["R_10", "R_25", "R_50", "R_75", "R_100"];
@@ -45,7 +46,7 @@ function getAccountIdentity(wsUrl?: string): string {
   return `${accountType}:${normalizedAccountId}`;
 }
 
-export function PriceChart({ onSymbolChange }: PriceChartProps) {
+export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
   const [prices, setPrices] = useState<number[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState("R_10");
@@ -129,6 +130,10 @@ export function PriceChart({ onSymbolChange }: PriceChartProps) {
   useEffect(() => {
     onSymbolChange?.(selectedSymbol);
   }, [onSymbolChange, selectedSymbol]);
+
+  useEffect(() => {
+    onSpotChange?.(currentPrice);
+  }, [currentPrice, onSpotChange]);
 
   const handleSymbolChange = (symbol: string) => {
     const socket = socketRef.current?.socket;

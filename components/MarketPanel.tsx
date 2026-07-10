@@ -10,11 +10,12 @@ interface MarketPanelProps {
 
 export default function MarketPanel({ wsUrl }: MarketPanelProps) {
   const [selectedSymbol, setSelectedSymbol] = useState("R_10");
+  const [currentSpot, setCurrentSpot] = useState<number | null>(null);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-      <PriceChart onSymbolChange={setSelectedSymbol} />
-      <TradePanel symbol={selectedSymbol} wsUrl={wsUrl} />
+      <PriceChart onSymbolChange={setSelectedSymbol} onSpotChange={setCurrentSpot} />
+      <TradePanel symbol={selectedSymbol} currentSpot={currentSpot} />
     </div>
   );
 }
