@@ -1,0 +1,116 @@
+export type DurationUnit = "m" | "s" | "t";
+export type DurationKind = "time" | "tick";
+export type BarrierKind = "digit" | "offset";
+export type TradeMode = "RISE_FALL" | "EVEN_ODD";
+export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD";
+
+export interface DurationConfig {
+  kind: DurationKind;
+  units: DurationUnit[];
+  time?: { min: number; max: number; label: string };
+  tick?: { min: number; max: number; label: string };
+}
+
+export interface BarrierConfig {
+  kind: BarrierKind;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  placeholder: string;
+}
+
+export interface ContractTypeConfig {
+  id: TradeMode;
+  label: string;
+  buttonLabels: [string, string];
+  contractTypes: [BuyContractType, BuyContractType];
+  duration: DurationConfig;
+  barrier?: BarrierConfig;
+}
+
+export const CONTRACT_TYPES: Record<TradeMode, ContractTypeConfig> = {
+  RISE_FALL: {
+    id: "RISE_FALL",
+    label: "Rise/Fall",
+    buttonLabels: ["Rise", "Fall"],
+    contractTypes: ["CALL", "PUT"],
+    duration: {
+      kind: "time",
+      units: ["m", "s"],
+      time: { min: 1, max: 1440, label: "1-1440 minutes" },
+      tick: { min: 1, max: 10, label: "1-10 ticks" },
+    },
+  },
+  EVEN_ODD: {
+    id: "EVEN_ODD",
+    label: "Even/Odd",
+    buttonLabels: ["Even", "Odd"],
+    contractTypes: ["DIGITEVEN", "DIGITODD"],
+    duration: {
+      kind: "tick",
+      units: ["t"],
+      tick: { min: 1, max: 10, label: "1-10 ticks" },
+    },
+  },
+};
+
+export const DEFAULT_TRADE_MODE: TradeMode = "RISE_FALL";
+
+export const validateDuration = (
+  value: number,
+  unit: DurationUnit,
+  config: ContractTypeConfig
+): string | null => {
+  if (config.duration.kind === "tick") {
+    if (unit !== "t") {
+      return "Tick-based contracts must use ticks.";
+    }
+
+    const tickRules = config.duration.tick!;
+    if (value < tickRules.min || value > tickRules.max) {
+      return `Duration must be ${tickRules.label}.`;
+    }
+
+    return null;
+  }
+
+  if (unit === "t") {
+    return "Time-based contracts must use minutes or seconds.";
+  }
+
+  const timeRules = config.duration.time!;
+  if (value < timeRules.min || value > timeRules.max) {
+    return `Duration must be ${timeRules.label}.`;
+  }
+
+  return null;
+};
+
+export const validateBarrier = (
+  value: string,
+  barrier?: BarrierConfig
+): string | null => {
+  if (!barrier) {
+    return null;
+  }
+
+  if (value.trim() === "") {
+    return "Barrier is required for this contract type.";
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "Barrier must be a valid number.";
+  }
+
+  if (numeric < barrier.min || numeric > barrier.max) {
+    return `Barrier must be between ${barrier.min} and ${barrier.max}.`;
+  }
+
+  if (barrier.kind === "digit" && !Number.isInteger(numeric)) {
+    return "Barrier must be a whole digit.";
+  }
+
+  return null;
+};

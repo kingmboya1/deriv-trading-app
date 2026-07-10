@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { subscribeToContract, useDerivSocketStore } from "@/lib/derivsocket";
+import {
+  CONTRACT_TYPES,
+  DEFAULT_TRADE_MODE,
+  TradeMode,
+  validateBarrier,
+  validateDuration,
+} from "@/lib/contract-types";
+import { BarrierInput } from "@/components/BarrierInput";
 interface TradePanelProps {
   symbol?: string;
   wsUrl?: string;
 }
 
-type TradeMode = "RISE_FALL" | "EVEN_ODD";
 type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD";
 
 type ProposalResponse = {
@@ -25,8 +32,10 @@ type BuyResponse = {
 export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(1);
-  const [durationUnit, setDurationUnit] = useState<"m" | "s">("m");
-  const [tradeMode, setTradeMode] = useState<TradeMode>("RISE_FALL");
+  const [durationUnit, setDurationUnit] = useState<"m" | "s" | "t">("m");
+  const [tradeMode, setTradeMode] = useState<TradeMode>(DEFAULT_TRADE_MODE);
+  const [barrier, setBarrier] = useState("");
+  const [barrierError, setBarrierError] = useState<string | null>(null);
   const [durationError, setDurationError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,30 +46,29 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const accountCurrency = useDerivSocketStore((state) => state.auth.currency);
   const [accountKind, setAccountKind] = useState<"real" | "demo" | "unknown">("unknown");
 
-  // Duration validation rules per unit (Deriv constraints for binary options)
-  const durationRules = {
-    s: { min: 15, max: 3600, label: "15-3600 seconds" },
-    m: { min: 1, max: 1440, label: "1-1440 minutes" },
-  };
-
-  const validateDuration = (dur: number, unit: "m" | "s"): string | null => {
-    const rules = durationRules[unit];
-
-    if (dur < rules.min || dur > rules.max) {
-      return `Duration must be ${rules.label} for ${unit === "s" ? "seconds" : "minutes"}`;
-    }
-
-    return null;
-  };
+  const currentContract = CONTRACT_TYPES[tradeMode];
 
   const handleDurationBlur = () => {
-    const error = validateDuration(duration, durationUnit);
+    const error = validateDuration(duration, durationUnit, currentContract);
     setDurationError(error);
+  };
+
+  const handleBarrierBlur = () => {
+    const error = validateBarrier(barrier, currentContract.barrier);
+    setBarrierError(error);
   };
 
   useEffect(() => {
     void connect();
   }, [connect]);
+
+  useEffect(() => {
+    if (currentContract.duration.kind === "tick") {
+      setDurationUnit("t");
+    } else if (durationUnit === "t") {
+      setDurationUnit("m");
+    }
+  }, [currentContract.duration.kind]);
 
   useEffect(() => {
     let mounted = true;
@@ -96,9 +104,16 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
     }
 
     // Validate duration before submitting
-    const durationValidationError = validateDuration(duration, durationUnit);
+    const durationValidationError = validateDuration(duration, durationUnit, currentContract);
     if (durationValidationError) {
       setDurationError(durationValidationError);
+      setMessage(null);
+      return;
+    }
+
+    const barrierValidationError = validateBarrier(barrier, currentContract.barrier);
+    if (barrierValidationError) {
+      setBarrierError(barrierValidationError);
       setMessage(null);
       return;
     }
@@ -278,16 +293,33 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
             <select
               value={durationUnit}
               onChange={(event) => {
-                setDurationUnit(event.target.value as "m" | "s");
+                setDurationUnit(event.target.value as "m" | "s" | "t");
                 setDurationError(null);
               }}
               className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white"
             >
-              <option value="m">m</option>
-              <option value="s">s</option>
+              {currentContract.duration.kind === "time" ? (
+                <>
+                  <option value="m">m</option>
+                  <option value="s">s</option>
+                </>
+              ) : (
+                <option value="t">t</option>
+              )}
             </select>
           </label>
         </div>
+
+        <BarrierInput
+          contractConfig={currentContract}
+          value={barrier}
+          onChange={(value) => {
+            setBarrier(value);
+            setBarrierError(null);
+          }}
+          onBlur={handleBarrierBlur}
+          error={barrierError}
+        />
 
         <div className="flex gap-3">
           <button
