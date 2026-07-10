@@ -7,6 +7,9 @@ interface TradePanelProps {
   wsUrl?: string;
 }
 
+type TradeMode = "RISE_FALL" | "EVEN_ODD";
+type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD";
+
 type ProposalResponse = {
   id?: string;
   ask_price?: number;
@@ -23,6 +26,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(1);
   const [durationUnit, setDurationUnit] = useState<"m" | "s">("m");
+  const [tradeMode, setTradeMode] = useState<TradeMode>("RISE_FALL");
   const [durationError, setDurationError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,7 +89,7 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
     };
   }, []);
 
-  const handleTrade = async (contractType: "CALL" | "PUT") => {
+  const handleTrade = async (contractType: BuyContractType) => {
     if (status !== "Connected") {
       setMessage("WebSocket is not connected yet.");
       return;
@@ -161,9 +165,17 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
 
       const payoutNum = buy?.payout !== undefined && buy?.payout !== null ? Number(buy.payout) : NaN;
       const payoutText = Number.isFinite(payoutNum) ? payoutNum.toFixed(2) : "-";
+      const verb =
+        contractType === "CALL"
+          ? "Rise"
+          : contractType === "PUT"
+          ? "Fall"
+          : contractType === "DIGITEVEN"
+          ? "Even"
+          : "Odd";
 
       setMessage(
-        `Bought ${contractType === "CALL" ? "Rise" : "Fall"} contract #${buy?.contract_id ?? "-"} for payout ${payoutText}`
+        `Bought ${verb} contract #${buy?.contract_id ?? "-"} for payout ${payoutText}`
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Trade failed.");
@@ -201,6 +213,31 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
             {accountKind === "unknown" ? "ACCOUNT?" : accountKind.toUpperCase()}
           </span>
         </div>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setTradeMode("RISE_FALL")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            tradeMode === "RISE_FALL"
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          Rise/Fall
+        </button>
+        <button
+          type="button"
+          onClick={() => setTradeMode("EVEN_ODD")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            tradeMode === "EVEN_ODD"
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          Even/Odd
+        </button>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -255,19 +292,23 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={() => void handleTrade("CALL")}
+            onClick={() =>
+              void handleTrade(tradeMode === "EVEN_ODD" ? "DIGITEVEN" : "CALL")
+            }
             disabled={isSubmitting || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSubmitting ? "Placing..." : "Rise"}
+            {isSubmitting ? "Placing..." : tradeMode === "EVEN_ODD" ? "Even" : "Rise"}
           </button>
           <button
             type="button"
-            onClick={() => void handleTrade("PUT")}
+            onClick={() =>
+              void handleTrade(tradeMode === "EVEN_ODD" ? "DIGITODD" : "PUT")
+            }
             disabled={isSubmitting || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSubmitting ? "Placing..." : "Fall"}
+            {isSubmitting ? "Placing..." : tradeMode === "EVEN_ODD" ? "Odd" : "Fall"}
           </button>
         </div>
 
