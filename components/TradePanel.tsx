@@ -6,6 +6,7 @@ import {
   CONTRACT_TYPES,
   DEFAULT_TRADE_MODE,
   TradeMode,
+  BuyContractType,
   validateBarrier,
   validateDuration,
 } from "@/lib/contract-types";
@@ -14,8 +15,6 @@ interface TradePanelProps {
   symbol?: string;
   wsUrl?: string;
 }
-
-type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER";
 
 type ProposalResponse = {
   id?: string;
@@ -273,6 +272,17 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
         >
           Over/Under
         </button>
+        <button
+          type="button"
+          onClick={() => setTradeMode("MATCHES_DIFFERS")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            tradeMode === "MATCHES_DIFFERS"
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          Matches/Differs
+        </button>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -340,6 +350,11 @@ export function TradePanel({ symbol = "R_10" }: TradePanelProps) {
           onBlur={handleBarrierBlur}
           error={barrierError}
         />
+        {currentContract.barrier ? (
+          <p className="text-xs text-slate-500">
+            Digit barrier rules are validated by Deriv during proposal submission. Any invalid value will return a server error.
+          </p>
+        ) : null}
 
         <div className="flex gap-3">
           <button

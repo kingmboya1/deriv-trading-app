@@ -1,8 +1,8 @@
 export type DurationUnit = "m" | "s" | "t";
 export type DurationKind = "time" | "tick";
 export type BarrierKind = "digit" | "offset";
-export type TradeMode = "RISE_FALL" | "EVEN_ODD" | "OVER_UNDER";
-export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER";
+export type TradeMode = "RISE_FALL" | "EVEN_ODD" | "OVER_UNDER" | "MATCHES_DIFFERS";
+export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER" | "DIGITMATCH" | "DIGITDIFF";
 
 export interface DurationConfig {
   kind: DurationKind;
@@ -58,6 +58,25 @@ export const CONTRACT_TYPES: Record<TradeMode, ContractTypeConfig> = {
     label: "Over/Under",
     buttonLabels: ["Over", "Under"],
     contractTypes: ["DIGITOVER", "DIGITUNDER"],
+    duration: {
+      kind: "tick",
+      units: ["t"],
+      tick: { min: 1, max: 10, label: "1-10 ticks" },
+    },
+    barrier: {
+      kind: "digit",
+      label: "Barrier",
+      min: 0,
+      max: 9,
+      step: 1,
+      placeholder: "0-9",
+    },
+  },
+  MATCHES_DIFFERS: {
+    id: "MATCHES_DIFFERS",
+    label: "Matches/Differs",
+    buttonLabels: ["Matches", "Differs"],
+    contractTypes: ["DIGITMATCH", "DIGITDIFF"],
     duration: {
       kind: "tick",
       units: ["t"],
