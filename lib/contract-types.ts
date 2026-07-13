@@ -1,14 +1,15 @@
-export type DurationUnit = "m" | "s" | "t";
+export type DurationUnit = "m" | "s" | "t" | "d";
 export type DurationKind = "time" | "tick";
 export type BarrierKind = "digit" | "offset";
-export type TradeMode = "RISE_FALL" | "EVEN_ODD" | "OVER_UNDER" | "MATCHES_DIFFERS" | "HIGHER_LOWER";
-export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER" | "DIGITMATCH" | "DIGITDIFF" | "HIGHER" | "LOWER";
+export type TradeMode = "RISE_FALL" | "EVEN_ODD" | "OVER_UNDER" | "MATCHES_DIFFERS" | "HIGHER_LOWER" | "ONETOUCH_NOTOUCH";
+export type BuyContractType = "CALL" | "PUT" | "DIGITEVEN" | "DIGITODD" | "DIGITOVER" | "DIGITUNDER" | "DIGITMATCH" | "DIGITDIFF" | "HIGHER" | "LOWER" | "ONETOUCH" | "NOTOUCH";
 
 export interface DurationConfig {
   kind: DurationKind;
   units: DurationUnit[];
   time?: { min: number; max: number; label: string };
   tick?: { min: number; max: number; label: string };
+  day?: { min: number; max: number; label: string };
 }
 
 export interface BarrierConfig {
@@ -111,6 +112,27 @@ export const CONTRACT_TYPES: Record<TradeMode, ContractTypeConfig> = {
       placeholder: "+1",
     },
   },
+  ONETOUCH_NOTOUCH: {
+    id: "ONETOUCH_NOTOUCH",
+    label: "Touch/No Touch",
+    buttonLabels: ["Touch", "No Touch"],
+    contractTypes: ["ONETOUCH", "NOTOUCH"],
+    duration: {
+      kind: "time",
+      units: ["m", "s", "d"],
+      time: { min: 1, max: 1440, label: "1-1440 minutes" },
+      tick: { min: 1, max: 10, label: "1-10 ticks" },
+      day: { min: 1, max: 365, label: "1-365 days" },
+    },
+    barrier: {
+      kind: "offset",
+      label: "Barrier offset",
+      min: -999999,
+      max: 999999,
+      step: 0.01,
+      placeholder: "+1.37",
+    },
+  },
 };
 
 export const DEFAULT_TRADE_MODE: TradeMode = "RISE_FALL";
@@ -134,7 +156,18 @@ export const validateDuration = (
   }
 
   if (unit === "t") {
-    return "Time-based contracts must use minutes or seconds.";
+    return "Time-based contracts must use minutes, seconds, or days.";
+  }
+
+  if (unit === "d") {
+    const dayRules = config.duration.day;
+    if (!dayRules) {
+      return "Day-based duration is not supported for this contract type.";
+    }
+    if (value < dayRules.min || value > dayRules.max) {
+      return `Duration must be ${dayRules.label}.`;
+    }
+    return null;
   }
 
   const timeRules = config.duration.time!;

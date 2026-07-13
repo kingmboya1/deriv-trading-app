@@ -32,7 +32,7 @@ type BuyResponse = {
 export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(1);
-  const [durationUnit, setDurationUnit] = useState<"m" | "s" | "t">("m");
+  const [durationUnit, setDurationUnit] = useState<"m" | "s" | "t" | "d">("m");
   const [tradeMode, setTradeMode] = useState<TradeMode>(DEFAULT_TRADE_MODE);
   const [barrier, setBarrier] = useState("");
   const [barrierError, setBarrierError] = useState<string | null>(null);
@@ -208,6 +208,10 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
           ? "Matches"
           : contractType === "DIGITDIFF"
           ? "Differs"
+          : contractType === "ONETOUCH"
+          ? "Touch"
+          : contractType === "NOTOUCH"
+          ? "No Touch"
           : "Trade";
 
       setMessage(
@@ -309,6 +313,17 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
         >
           Higher/Lower
         </button>
+        <button
+          type="button"
+          onClick={() => setTradeMode("ONETOUCH_NOTOUCH")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            tradeMode === "ONETOUCH_NOTOUCH"
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          Touch/No Touch
+        </button>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -349,7 +364,7 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
             <select
               value={durationUnit}
               onChange={(event) => {
-                setDurationUnit(event.target.value as "m" | "s" | "t");
+                setDurationUnit(event.target.value as "m" | "s" | "t" | "d");
                 setDurationError(null);
               }}
               className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white"
@@ -358,6 +373,9 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
                 <>
                   <option value="m">m</option>
                   <option value="s">s</option>
+                  {currentContract.duration.units.includes("d") && (
+                    <option value="d">d</option>
+                  )}
                 </>
               ) : (
                 <option value="t">t</option>
