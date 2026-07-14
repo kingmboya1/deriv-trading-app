@@ -116,6 +116,23 @@ let activeAccountIdentity: string | null = null;
 // was intentional (account switch) and should NOT reset activeAccountType.
 let intentionalClose = false;
 
+// ============================================================================
+// Intentional disconnect (logout) — closes socket without triggering reconnect
+// ============================================================================
+
+export const disconnectSocket = () => {
+  clearReconnectTimer();
+  reconnectAttempts = 0;
+  // Reuse the intentionalClose flag so the close handler doesn't start
+  // the reconnect loop or reset any store state we've already cleared.
+  intentionalClose = true;
+
+  if (socket && socket.readyState !== WebSocket.CLOSED) {
+    socket.close();
+    socket = null;
+  }
+};
+
 const getSubscriptionId = (payload: Record<string, unknown>): number | null => {
   const subscription = payload.subscription;
 

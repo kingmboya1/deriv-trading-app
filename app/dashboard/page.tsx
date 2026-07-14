@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import BalanceBar from "@/components/BalanceBar";
 import MarketPanel from "@/components/MarketPanel";
 import Portfolio from "@/components/Portfolio";
-import AccountSwitcher, { type AccountEntry } from "@/components/AccountSwitcher";
+import ProfileMenu from "@/components/ProfileMenu";
+import { type AccountEntry } from "@/components/AccountSwitcher";
 
 type DerivAccount = {
   account_type?: string;
@@ -139,8 +140,8 @@ export default async function DashboardPage() {
               Trading Platform
             </h1>
           </div>
-          {/* Account switcher — replaces the static DEMO/REAL badge */}
-          <AccountSwitcher
+          {/* Profile menu — avatar button with account info, switcher, and logout */}
+          <ProfileMenu
             activeAccountId={accountId ?? ""}
             accounts={accounts}
           />
