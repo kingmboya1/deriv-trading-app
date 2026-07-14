@@ -41,14 +41,8 @@ export async function GET(request: NextRequest) {
   const dashboardUrl = new URL("/dashboard", appUrl).toString();
   const response = NextResponse.redirect(dashboardUrl);
 
-  response.cookies.set("pkce_verifier", "", {
-    path: "/",
-    maxAge: 0,
-  });
-  response.cookies.set("oauth_state", "", {
-    path: "/",
-    maxAge: 0,
-  });
+  response.cookies.set("pkce_verifier", "", { path: "/", maxAge: 0 });
+  response.cookies.set("oauth_state", "", { path: "/", maxAge: 0 });
 
   if (tokenPayload.access_token) {
     response.cookies.set("deriv_auth_token", tokenPayload.access_token, {
@@ -77,16 +71,19 @@ export async function GET(request: NextRequest) {
 
       if (accountsResponse.ok) {
         const accountsPayload = (await accountsResponse.json()) as {
-          data?: Array<{ account_id?: string; account_type?: string }>;
+          data?: Array<{ account_id?: string; account_type?: string; loginid?: string }>;
         };
 
-        const demoAccount = accountsPayload.data?.find(
+        const accounts = accountsPayload.data ?? [];
+
+        const demoAccount = accounts.find(
           (account) => account.account_type === "demo"
         );
-        const realAccount = accountsPayload.data?.find(
+        const realAccount = accounts.find(
           (account) => account.account_type !== "demo"
         );
 
+        // Active account based on the user's sign-in preference
         const chosenAccount =
           preference === "demo"
             ? demoAccount ?? realAccount
@@ -98,6 +95,28 @@ export async function GET(request: NextRequest) {
             sameSite: "lax",
             maxAge: 60 * 60 * 24,
           });
+        }
+
+        // Store ALL accounts so the dashboard switcher can list them without
+        // needing to re-call the accounts API.  This cookie is NOT httpOnly so
+        // the client-side switcher component can read it directly.
+        const accountList = accounts
+          .filter((a) => a.account_id)
+          .map((a) => ({
+            account_id: a.account_id!,
+            account_type: a.account_type ?? "real",
+          }));
+
+        if (accountList.length > 0) {
+          response.cookies.set(
+            "deriv_accounts",
+            JSON.stringify(accountList),
+            {
+              path: "/",
+              sameSite: "lax",
+              maxAge: 60 * 60 * 24,
+            }
+          );
         }
       }
     } catch {

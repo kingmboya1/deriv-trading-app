@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import BalanceBar from "@/components/BalanceBar";
 import MarketPanel from "@/components/MarketPanel";
 import Portfolio from "@/components/Portfolio";
+import AccountSwitcher, { type AccountEntry } from "@/components/AccountSwitcher";
 
 type DerivAccount = {
   account_type?: string;
@@ -109,6 +110,17 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
+  // Parse stored account list for the switcher
+  let accounts: AccountEntry[] = [];
+  const accountsRaw = cookieStore.get("deriv_accounts")?.value;
+  if (accountsRaw) {
+    try {
+      accounts = JSON.parse(accountsRaw) as AccountEntry[];
+    } catch {
+      // Ignore — falls back to empty, switcher shows single-account badge
+    }
+  }
+
   const balances = await fetchAccountBalances(token);
   const { realBalance, demoBalance } = balances;
   const wsUrl = await fetchWsUrl(token, accountId ?? "");
@@ -118,17 +130,20 @@ export default async function DashboardPage() {
   return (
     <main className="min-h-screen bg-canvas px-6 py-10 text-primary">
       <div className="mx-auto flex max-w-7xl flex-col gap-5">
-        <header className="rounded-2xl border border-hairline bg-surface px-6 py-5">
-          <p className="font-display text-xs font-semibold uppercase tracking-[0.3em] text-accent">
-            Dashboard
-          </p>
-          <h1 className="mt-1.5 font-display text-2xl font-semibold text-primary">
-            Trading Platform
-          </h1>
-          <p className="mt-2 font-sans text-sm text-muted">
-            Authentication is now wired end to end. Trading UI components will
-            be added next.
-          </p>
+        <header className="flex items-center justify-between gap-4 rounded-2xl border border-hairline bg-surface px-6 py-5">
+          <div>
+            <p className="font-display text-xs font-semibold uppercase tracking-[0.3em] text-accent">
+              Dashboard
+            </p>
+            <h1 className="mt-1.5 font-display text-2xl font-semibold text-primary">
+              Trading Platform
+            </h1>
+          </div>
+          {/* Account switcher — replaces the static DEMO/REAL badge */}
+          <AccountSwitcher
+            activeAccountId={accountId ?? ""}
+            accounts={accounts}
+          />
         </header>
 
         <BalanceBar realBalance={realBalance} demoBalance={demoBalance} connectedAccountType={connectedAccountType} />

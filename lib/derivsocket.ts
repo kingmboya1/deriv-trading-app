@@ -62,6 +62,7 @@ interface DerivSocketStore {
   portfolio: Record<number, OpenContract>;
   auth: SocketAuthState;
   connect: () => Promise<void>;
+  reconnect: () => Promise<void>;
   send: (payload: Record<string, unknown>) => void;
   request: <T>(payload: Record<string, unknown>) => Promise<T>;
   setAuth: (auth: Partial<SocketAuthState>) => void;
@@ -252,6 +253,28 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
     } catch (error) {
       set({ status: "Disconnected" });
       console.error("[deriv-socket] Failed to connect:", error);
+    }
+  },
+
+  // Force-reconnect — closes any existing socket and opens a fresh one.
+  // Used by the account switcher after updating deriv_account_id.
+  reconnect: async () => {
+    clearReconnectTimer();
+    reconnectAttempts = 0;
+
+    // Close existing socket cleanly; connectSocket will open a new one
+    if (socket && socket.readyState !== WebSocket.CLOSED) {
+      socket.close();
+      socket = null;
+    }
+
+    try {
+      set({ status: "Connecting" });
+      const wsUrl = await fetchFreshWsUrl();
+      connectSocket(wsUrl, set, get);
+    } catch (error) {
+      set({ status: "Disconnected" });
+      console.error("[deriv-socket] Failed to reconnect:", error);
     }
   },
 
