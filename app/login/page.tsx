@@ -66,34 +66,38 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-16 text-white">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl">
-        <p className="mb-3 text-sm uppercase tracking-[0.3em] text-sky-400">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-6 py-16 text-primary">
+      <div className="w-full max-w-md rounded-2xl border border-hairline bg-surface p-8 shadow-xl">
+        <p className="mb-3 font-display text-xs font-semibold uppercase tracking-[0.3em] text-accent">
           Deriv OAuth
         </p>
-        <h1 className="mb-4 text-3xl font-semibold">Connect your Deriv account</h1>
-        <p className="mb-8 text-sm text-slate-300">
+        <h1 className="mb-4 font-display text-3xl font-semibold text-primary">
+          Connect your Deriv account
+        </h1>
+        <p className="mb-8 font-sans text-sm text-muted">
           This starter flow authenticates a user and prepares the dashboard for
           the next trading UI steps.
         </p>
-        <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-950 p-4">
-          <p className="mb-3 text-sm font-medium text-slate-200">Choose account type</p>
-          <label className="flex items-center gap-3 text-sm text-slate-300">
+        <div className="mb-6 rounded-xl border border-hairline bg-card p-4">
+          <p className="mb-3 font-display text-sm font-semibold text-primary">
+            Choose account type
+          </p>
+          <label className="flex items-center gap-3 font-sans text-sm text-muted">
             <input
               type="radio"
               name="accountType"
               value="real"
               defaultChecked
-              className="h-4 w-4 text-sky-500"
+              className="h-4 w-4 accent-[var(--color-accent)]"
             />
             Real account
           </label>
-          <label className="mt-2 flex items-center gap-3 text-sm text-slate-300">
+          <label className="mt-2 flex items-center gap-3 font-sans text-sm text-muted">
             <input
               type="radio"
               name="accountType"
               value="demo"
-              className="h-4 w-4 text-sky-500"
+              className="h-4 w-4 accent-[var(--color-accent)]"
             />
             Demo account
           </label>
@@ -101,7 +105,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleLogin}
-          className="w-full rounded-full bg-sky-500 px-4 py-3 font-medium text-white transition hover:bg-sky-400"
+          className="w-full rounded-full bg-accent px-4 py-3 font-display font-semibold text-canvas transition-opacity hover:opacity-90"
         >
           Login with Deriv
         </button>

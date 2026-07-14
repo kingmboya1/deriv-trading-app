@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -25,9 +26,36 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/*
+        Inline script runs before first paint to apply the saved theme from
+        localStorage, preventing any flash of the wrong theme.
+        It is intentionally a raw <script> — next/script cannot be used
+        inside <head> for this purpose.
+      */}
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('deriv-app-theme');
+                  if (t === 'light' || t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', t);
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Persistent top bar — visible on every page */}
+        <div className="fixed right-4 top-4 z-50">
+          <ThemeToggle />
+        </div>
         {children}
       </body>
     </html>

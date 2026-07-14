@@ -5,14 +5,37 @@
 /* ── Google Fonts ─────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap');
 
+/* ── Design token CSS variables ───────────────────────────── */
+/* Default: dark theme */
 :root {
-  --background: #0B0E14;
-  --foreground: #E6E9EF;
+  --color-canvas:   #0B0E14;
+  --color-surface:  #12161F;
+  --color-card:     #1B2130;
+  --color-hairline: #232838;
+  --color-primary:  #E6E9EF;
+  --color-muted:    #8B93A7;
+  --color-gain:     #2FBE85;
+  --color-loss:     #F0526B;
+  --color-accent:   #D9A94D;
 }
 
+/* Light theme overrides */
+[data-theme="light"] {
+  --color-canvas:   #F7F8FA;
+  --color-surface:  #FFFFFF;
+  --color-card:     #F0F2F6;
+  --color-hairline: #DDE1E8;
+  --color-primary:  #1A1D24;
+  --color-muted:    #5B6472;
+  --color-gain:     #1F9E6D;
+  --color-loss:     #D63754;
+  --color-accent:   #B8862E;
+}
+
+/* ── Base styles ───────────────────────────────────────────── */
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--color-primary);
+  background: var(--color-canvas);
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
