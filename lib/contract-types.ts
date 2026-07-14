@@ -120,7 +120,7 @@ export const CONTRACT_TYPES: Record<TradeMode, ContractTypeConfig> = {
     duration: {
       kind: "time",
       units: ["m", "s", "d"],
-      time: { min: 1, max: 1440, label: "1-1440 minutes" },
+      time: { min: 2, max: 1440, label: "2-1440 minutes" },
       tick: { min: 1, max: 10, label: "1-10 ticks" },
       day: { min: 1, max: 365, label: "1-365 days" },
     },
