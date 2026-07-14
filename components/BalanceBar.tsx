@@ -40,16 +40,26 @@ export default function BalanceBar({ realBalance, demoBalance, connectedAccountT
         : "Connected to UNKNOWN";
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Balance</p>
-            <p className="mt-2 text-2xl font-semibold">{formattedBalance}</p>
-          </div>
-          <div className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-sm text-slate-300">
-            {statusText}
-          </div>
+    <section className="rounded-2xl border border-hairline bg-surface px-6 py-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="font-display text-xs font-semibold uppercase tracking-[0.25em] text-muted">
+            Balance
+          </p>
+          <p className="mt-1 font-mono text-2xl font-medium tabular-nums text-primary">
+            {formattedBalance}
+          </p>
+        </div>
+        <div
+          className={`rounded-lg border px-3 py-1.5 font-mono text-xs font-medium tracking-wide ${
+            connectedAccountType === "real"
+              ? "border-gain/30 bg-gain/10 text-gain"
+              : connectedAccountType === "demo"
+              ? "border-loss/30 bg-loss/10 text-loss"
+              : "border-hairline bg-card text-muted"
+          }`}
+        >
+          {statusText}
         </div>
       </div>
     </section>

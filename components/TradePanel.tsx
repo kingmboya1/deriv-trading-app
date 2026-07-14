@@ -12,6 +12,7 @@ import {
 } from "@/lib/contract-types";
 import { BarrierInput } from "@/components/BarrierInput";
 import { OffsetBarrierInput } from "@/components/OffsetBarrierInput";
+
 interface TradePanelProps {
   symbol?: string;
   currentSpot?: number | null;
@@ -29,11 +30,39 @@ type BuyResponse = {
   payout?: number;
 };
 
+// ── Category / two-tier selector config ─────────────────────
+type Category = "directional" | "barrier" | "digits";
+
+const CATEGORIES: { id: Category; label: string }[] = [
+  { id: "directional", label: "Directional" },
+  { id: "barrier",     label: "Barrier" },
+  { id: "digits",      label: "Digits" },
+];
+
+const CATEGORY_MODES: Record<Category, TradeMode[]> = {
+  directional: ["RISE_FALL", "OVER_UNDER"],
+  barrier:     ["HIGHER_LOWER", "ONETOUCH_NOTOUCH"],
+  digits:      ["EVEN_ODD", "MATCHES_DIFFERS"],
+};
+
+const MODE_CATEGORY: Record<TradeMode, Category> = {
+  RISE_FALL:        "directional",
+  OVER_UNDER:       "directional",
+  HIGHER_LOWER:     "barrier",
+  ONETOUCH_NOTOUCH: "barrier",
+  EVEN_ODD:         "digits",
+  MATCHES_DIFFERS:  "digits",
+};
+
+// ── Duration unit pills config ───────────────────────────────
+const UNIT_LABELS: Record<string, string> = { t: "t", s: "s", m: "m", d: "d" };
+
 export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
   const [stake, setStake] = useState(1);
   const [duration, setDuration] = useState(1);
   const [durationUnit, setDurationUnit] = useState<"m" | "s" | "t" | "d">("m");
   const [tradeMode, setTradeMode] = useState<TradeMode>(DEFAULT_TRADE_MODE);
+  const [activeCategory, setActiveCategory] = useState<Category>(MODE_CATEGORY[DEFAULT_TRADE_MODE]);
   const [barrier, setBarrier] = useState("");
   const [barrierError, setBarrierError] = useState<string | null>(null);
   const [durationError, setDurationError] = useState<string | null>(null);
@@ -226,122 +255,128 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
     }
   };
 
+  // ── Derived values for the two-tier selector ────────────────
+  const modesInCategory = CATEGORY_MODES[activeCategory];
+
+  const handleCategoryClick = (cat: Category) => {
+    setActiveCategory(cat);
+    // Auto-select first mode in the new category
+    const firstMode = CATEGORY_MODES[cat][0];
+    setTradeMode(firstMode);
+    setBarrier("");
+    setBarrierError(null);
+    setDurationError(null);
+  };
+
+  const handleModeClick = (mode: TradeMode) => {
+    setTradeMode(mode);
+    setBarrier("");
+    setBarrierError(null);
+    setDurationError(null);
+  };
+
+  // ── Duration unit pills ──────────────────────────────────────
+  const availableUnits =
+    currentContract.duration.kind === "tick"
+      ? ["t"]
+      : currentContract.duration.units.filter((u) => u !== "t");
+
+  // ── Render ───────────────────────────────────────────────────
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <section className="rounded-2xl border border-hairline bg-surface p-5">
+
+      {/* Header row */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Trade Panel</h2>
+        <h2 className="font-display text-base font-semibold text-primary">Trade</h2>
         <div className="flex items-center gap-2">
+          {/* WS status badge */}
           <span
-            className={`rounded-full px-3 py-1 text-sm ${
+            className={`rounded-md px-2.5 py-0.5 font-mono text-xs font-medium tracking-wide ${
               status === "Connected"
-                ? "bg-emerald-500/10 text-emerald-300"
+                ? "bg-gain/10 text-gain"
                 : status === "Reconnecting..."
-                  ? "bg-amber-500/10 text-amber-300"
-                  : "bg-slate-800 text-slate-300"
+                ? "bg-accent/10 text-accent"
+                : "bg-card text-muted"
             }`}
           >
             {status}
           </span>
+          {/* Account kind badge */}
           <span
-            className={`rounded-full px-3 py-1 text-sm ${
+            className={`rounded-md px-2.5 py-0.5 font-mono text-xs font-medium tracking-wide ${
               accountKind === "real"
-                ? "bg-emerald-500/10 text-emerald-300"
+                ? "bg-gain/10 text-gain"
                 : accountKind === "demo"
-                  ? "bg-rose-500/10 text-rose-300"
-                  : "bg-slate-800 text-slate-300"
+                ? "bg-loss/10 text-loss"
+                : "bg-card text-muted"
             }`}
             title={accountKind === "unknown" ? "Account type unknown" : `Using ${accountKind} account`}
           >
-            {accountKind === "unknown" ? "ACCOUNT?" : accountKind.toUpperCase()}
+            {accountKind === "unknown" ? "ACCT?" : accountKind.toUpperCase()}
           </span>
         </div>
       </div>
 
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTradeMode("RISE_FALL")}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            tradeMode === "RISE_FALL"
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          Rise/Fall
-        </button>
-        <button
-          type="button"
-          onClick={() => setTradeMode("EVEN_ODD")}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            tradeMode === "EVEN_ODD"
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          Even/Odd
-        </button>
-        <button
-          type="button"
-          onClick={() => setTradeMode("OVER_UNDER")}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            tradeMode === "OVER_UNDER"
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          Over/Under
-        </button>
-        <button
-          type="button"
-          onClick={() => setTradeMode("MATCHES_DIFFERS")}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            tradeMode === "MATCHES_DIFFERS"
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          Matches/Differs
-        </button>
-        <button
-          type="button"
-          onClick={() => setTradeMode("HIGHER_LOWER")}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            tradeMode === "HIGHER_LOWER"
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          Higher/Lower
-        </button>
-        <button
-          type="button"
-          onClick={() => setTradeMode("ONETOUCH_NOTOUCH")}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            tradeMode === "ONETOUCH_NOTOUCH"
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          Touch/No Touch
-        </button>
+      {/* ── Tier 1: Category tabs ────────────────────────────── */}
+      <div className="mt-4 flex gap-1 rounded-xl bg-card p-1">
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => handleCategoryClick(cat.id)}
+            className={`flex-1 rounded-lg py-1.5 font-display text-xs font-semibold transition-colors ${
+              activeCategory === cat.id
+                ? "bg-surface text-primary shadow-sm"
+                : "text-muted hover:text-primary"
+            }`}
+          >
+            {cat.label}
+          </button>
+        ))}
       </div>
 
+      {/* ── Tier 2: Contract type buttons within category ───── */}
+      <div className="mt-2 flex gap-1.5">
+        {modesInCategory.map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => handleModeClick(mode)}
+            className={`flex-1 rounded-lg border px-3 py-1.5 font-display text-xs font-semibold transition-colors ${
+              tradeMode === mode
+                ? "border-accent/60 bg-accent/10 text-accent"
+                : "border-hairline bg-card text-muted hover:border-muted/40 hover:text-primary"
+            }`}
+          >
+            {CONTRACT_TYPES[mode].label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Form fields ─────────────────────────────────────── */}
       <div className="mt-4 space-y-3">
-        <label className="block text-sm text-slate-300">
-          <span className="mb-1 block">Stake</span>
+
+        {/* Stake */}
+        <div>
+          <label className="mb-1 block font-display text-xs font-medium text-muted">
+            Stake
+          </label>
           <input
             type="number"
             min="0.35"
             step="0.01"
             value={stake}
             onChange={(event) => setStake(Number(event.target.value))}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+            className="w-full rounded-lg border border-hairline bg-card px-3 py-2 font-mono text-sm text-primary placeholder-muted focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
           />
-        </label>
+        </div>
 
-        <div className="flex gap-3">
-          <label className="flex-1 text-sm text-slate-300">
-            <span className="mb-1 block">Duration</span>
+        {/* Duration + unit pills */}
+        <div>
+          <label className="mb-1 block font-display text-xs font-medium text-muted">
+            Duration
+          </label>
+          <div className="flex items-stretch gap-2">
             <input
               type="number"
               min="1"
@@ -352,38 +387,37 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
                 setDurationError(null);
               }}
               onBlur={handleDurationBlur}
-              className={`w-full rounded-xl border px-3 py-2 text-white bg-slate-950 ${
-                durationError ? "border-rose-500" : "border-slate-700"
+              className={`flex-1 rounded-lg border bg-card px-3 py-2 font-mono text-sm text-primary placeholder-muted focus:outline-none focus:ring-1 focus:ring-accent/30 ${
+                durationError ? "border-loss focus:border-loss" : "border-hairline focus:border-accent/50"
               }`}
             />
-            {durationError && <p className="mt-1 text-xs text-rose-400">{durationError}</p>}
-          </label>
-
-          <label className="w-24 text-sm text-slate-300">
-            <span className="mb-1 block">Unit</span>
-            <select
-              value={durationUnit}
-              onChange={(event) => {
-                setDurationUnit(event.target.value as "m" | "s" | "t" | "d");
-                setDurationError(null);
-              }}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white"
-            >
-              {currentContract.duration.kind === "time" ? (
-                <>
-                  <option value="m">m</option>
-                  <option value="s">s</option>
-                  {currentContract.duration.units.includes("d") && (
-                    <option value="d">d</option>
-                  )}
-                </>
-              ) : (
-                <option value="t">t</option>
-              )}
-            </select>
-          </label>
+            {/* Pill toggles for duration unit */}
+            <div className="flex gap-1 rounded-lg border border-hairline bg-card p-1">
+              {availableUnits.map((unit) => (
+                <button
+                  key={unit}
+                  type="button"
+                  onClick={() => {
+                    setDurationUnit(unit as "m" | "s" | "t" | "d");
+                    setDurationError(null);
+                  }}
+                  className={`min-w-[2rem] rounded-md px-2 py-1 font-mono text-xs font-medium transition-colors ${
+                    durationUnit === unit
+                      ? "bg-accent/15 text-accent"
+                      : "text-muted hover:text-primary"
+                  }`}
+                >
+                  {UNIT_LABELS[unit] ?? unit}
+                </button>
+              ))}
+            </div>
+          </div>
+          {durationError && (
+            <p className="mt-1 font-sans text-xs text-loss">{durationError}</p>
+          )}
         </div>
 
+        {/* Barrier input — rendered by existing components, styling applied via className passthrough */}
         {currentContract.barrier?.kind === "offset" ? (
           <OffsetBarrierInput
             barrier={currentContract.barrier}
@@ -409,41 +443,44 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
               error={barrierError}
             />
             {currentContract.barrier ? (
-              <p className="text-xs text-slate-500">
+              <p className="font-sans text-xs text-muted">
                 Digit barrier rules are validated by Deriv during proposal submission. Any invalid value will return a server error.
               </p>
             ) : null}
           </>
         )}
 
-        <div className="flex gap-3">
+        {/* Buy / Sell action buttons */}
+        <div className="flex gap-2 pt-1">
           <button
             type="button"
             onClick={() => void handleTrade(currentContract.contractTypes[0])}
             disabled={isSubmitting || status !== "Connected" || durationError !== null}
-            className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-lg bg-gain px-4 py-2.5 font-display text-sm font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSubmitting ? "Placing..." : currentContract.buttonLabels[0]}
+            {isSubmitting ? "Placing…" : currentContract.buttonLabels[0]}
           </button>
           <button
             type="button"
             onClick={() => void handleTrade(currentContract.contractTypes[1])}
             disabled={isSubmitting || status !== "Connected" || durationError !== null}
-            className="flex-1 rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-lg bg-loss px-4 py-2.5 font-display text-sm font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSubmitting ? "Placing..." : currentContract.buttonLabels[1]}
+            {isSubmitting ? "Placing…" : currentContract.buttonLabels[1]}
           </button>
         </div>
 
+        {/* Status message */}
         {message ? (
           <div
-            className={`rounded-xl border p-3 text-sm ${
+            className={`rounded-lg border px-3 py-2.5 font-sans text-sm ${
               messageType === "error"
-                ? "border-rose-700 bg-rose-950 text-rose-200"
-                : "border-emerald-700 bg-emerald-950 text-emerald-200"
+                ? "border-loss/30 bg-loss/10 text-loss"
+                : "border-gain/30 bg-gain/10 text-gain"
             }`}
           >
-            {message}
+            {/* Contract ID and payout rendered in mono */}
+            <span className="font-mono">{message}</span>
           </div>
         ) : null}
       </div>

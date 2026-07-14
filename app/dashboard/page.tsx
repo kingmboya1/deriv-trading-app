@@ -116,14 +116,16 @@ export default async function DashboardPage() {
   console.log("[dashboard] wsUrl being passed to TradePanel", wsUrl);
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-          <p className="text-sm uppercase tracking-[0.3em] text-sky-400">
+    <main className="min-h-screen bg-canvas px-6 py-10 text-primary">
+      <div className="mx-auto flex max-w-7xl flex-col gap-5">
+        <header className="rounded-2xl border border-hairline bg-surface px-6 py-5">
+          <p className="font-display text-xs font-semibold uppercase tracking-[0.3em] text-accent">
             Dashboard
           </p>
-          <h1 className="mt-2 text-3xl font-semibold">Welcome, you are logged in</h1>
-          <p className="mt-3 text-sm text-slate-300">
+          <h1 className="mt-1.5 font-display text-2xl font-semibold text-primary">
+            Trading Platform
+          </h1>
+          <p className="mt-2 font-sans text-sm text-muted">
             Authentication is now wired end to end. Trading UI components will
             be added next.
           </p>
