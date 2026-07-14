@@ -11,11 +11,11 @@ export async function GET(request: NextRequest) {
     "http://localhost:3000/api/auth/callback";
 
   if (!code || !codeVerifier || !appId) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (state && storedState && state !== storedState) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   const tokenResponse = await fetch("https://auth.deriv.com/oauth2/token", {

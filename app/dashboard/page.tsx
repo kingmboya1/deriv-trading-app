@@ -106,7 +106,7 @@ export default async function DashboardPage() {
   const accountId = cookieStore.get("deriv_account_id")?.value;
 
   if (!token) {
-    redirect("/login");
+    redirect("/");
   }
 
   const balances = await fetchAccountBalances(token);
