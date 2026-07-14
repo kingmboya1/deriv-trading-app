@@ -74,7 +74,9 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
   const connect = useDerivSocketStore((state) => state.connect);
   const request = useDerivSocketStore((state) => state.request);
   const accountCurrency = useDerivSocketStore((state) => state.auth.currency);
-  const [accountKind, setAccountKind] = useState<"real" | "demo" | "unknown">("unknown");
+  // Read account type from the store — same source of truth as the WS URL.
+  // Updates automatically whenever reconnect() fires for an account switch.
+  const accountKind = useDerivSocketStore((state) => state.activeAccountType);
 
   const currentContract = CONTRACT_TYPES[tradeMode];
 
@@ -99,33 +101,6 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
       setDurationUnit("m");
     }
   }, [currentContract.duration.kind]);
-
-  useEffect(() => {
-    let mounted = true;
-    void (async () => {
-      try {
-        const res = await fetch("/api/ws-token");
-        if (!mounted) return;
-        if (!res.ok) {
-          setAccountKind("unknown");
-          return;
-        }
-        const payload = (await res.json()) as { wsUrl?: string };
-        const wsUrl = payload.wsUrl;
-        if (typeof wsUrl === "string") {
-          setAccountKind(wsUrl.includes("/demo") ? "demo" : "real");
-        } else {
-          setAccountKind("unknown");
-        }
-      } catch {
-        if (!mounted) return;
-        setAccountKind("unknown");
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const handleTrade = async (contractType: BuyContractType) => {
     if (status !== "Connected") {

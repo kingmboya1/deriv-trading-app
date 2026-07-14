@@ -58,6 +58,8 @@ interface SocketAuthState {
 
 interface DerivSocketStore {
   status: ConnectionStatus;
+  /** Type of the currently connected account — derived from the live WS URL. */
+  activeAccountType: "real" | "demo" | "unknown";
   balance: number | null;
   portfolio: Record<number, OpenContract>;
   auth: SocketAuthState;
@@ -110,6 +112,9 @@ const pendingRequests = new Map<number, PendingRequest>();
 let nextReqId = 1;
 const activeContractSubscriptions = new Map<number, number>();
 let activeAccountIdentity: string | null = null;
+// Set to true by reconnect() so the close-event handler knows the disconnect
+// was intentional (account switch) and should NOT reset activeAccountType.
+let intentionalClose = false;
 
 const getSubscriptionId = (payload: Record<string, unknown>): number | null => {
   const subscription = payload.subscription;
@@ -211,6 +216,7 @@ const getAccountIdentityFromWsUrl = (wsUrl: string): string => {
 const resetAccountScopedState = (set: DerivSocketSet) => {
   set((state: DerivSocketStore) => ({
     ...state,
+    activeAccountType: "unknown",
     balance: null,
     portfolio: {},
     auth: {
@@ -227,6 +233,7 @@ const resetAccountScopedState = (set: DerivSocketSet) => {
 
 export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   status: "Disconnected",
+  activeAccountType: "unknown",
   balance: null,
   portfolio: {},
   auth: {
@@ -262,11 +269,20 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
     clearReconnectTimer();
     reconnectAttempts = 0;
 
+    // Mark that this close is intentional so the close-event handler does
+    // NOT reset activeAccountType back to "unknown" (which would cause a
+    // visible flash of the wrong badge in TradePanel / BalanceBar).
+    intentionalClose = true;
+
     // Close existing socket cleanly; connectSocket will open a new one
     if (socket && socket.readyState !== WebSocket.CLOSED) {
       socket.close();
       socket = null;
     }
+
+    // Eagerly clear account-scoped data so no stale balance / portfolio
+    // from the previous account is displayed while the new socket connects.
+    resetAccountScopedState(set);
 
     try {
       set({ status: "Connecting" });
@@ -473,6 +489,11 @@ const connectSocket = (
   }
   activeAccountIdentity = nextAccountIdentity;
 
+  // Derive account type from the WS URL immediately — this is the single
+  // source of truth that all UI badges (TradePanel, BalanceBar) read from.
+  const accountTypeFromUrl: "real" | "demo" = wsUrl.includes("/demo") ? "demo" : "real";
+  set({ activeAccountType: accountTypeFromUrl });
+
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     socket.close();
   }
@@ -500,14 +521,22 @@ const connectSocket = (
     console.log("[deriv-socket] connection closed", { code: event.code, reason: event.reason });
     socket = null;
 
+    // If this close was triggered intentionally by reconnect() (account switch),
+    // don't reset activeAccountType — connectSocket() already set the new value
+    // from the fresh WS URL before opening the new socket.
+    if (intentionalClose) {
+      intentionalClose = false;
+      return;
+    }
+
     if (reconnectAttempts >= 5) {
-      set({ status: "Disconnected" });
+      set({ status: "Disconnected", activeAccountType: "unknown" });
       console.log("[deriv-socket] max reconnection attempts reached");
       return;
     }
 
     reconnectAttempts += 1;
-    set({ status: "Reconnecting..." });
+    set({ status: "Reconnecting...", activeAccountType: "unknown" });
 
     reconnectTimer = window.setTimeout(() => {
       void reconnectAfterDelay(set, get);
