@@ -33,7 +33,6 @@ function setCookie(name: string, value: string, maxAge = 60 * 60 * 24 * 7) {
 // ─── Sign-in UI ───────────────────────────────────────────────────────────────
 
 export default function SignInClient() {
-  const [accountType, setAccountType] = useState<"real" | "demo">("real");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
@@ -52,7 +51,8 @@ export default function SignInClient() {
     const { codeVerifier, codeChallenge } = await createPkcePair();
     const state = crypto.randomUUID();
 
-    setCookie("deriv_account_preference", accountType, 60 * 60 * 24);
+    // Account preference is no longer set here — switching between Real and
+    // Demo happens inside the dashboard via the profile menu after login.
     setCookie("pkce_verifier", codeVerifier);
     setCookie("oauth_state", state);
 
@@ -114,37 +114,6 @@ export default function SignInClient() {
           <p className="mt-1.5 font-sans text-sm text-muted">
             Connect your Deriv account to start trading.
           </p>
-
-          {/* Account type selector */}
-          <div className="mt-6">
-            <p className="mb-2 font-display text-xs font-semibold uppercase tracking-wide text-muted">
-              Account type
-            </p>
-            <div className="flex gap-1 rounded-xl bg-card p-1">
-              <button
-                type="button"
-                onClick={() => setAccountType("real")}
-                className={`flex-1 rounded-lg py-1.5 font-display text-xs font-semibold transition-colors ${
-                  accountType === "real"
-                    ? "bg-surface text-primary shadow-sm"
-                    : "text-muted hover:text-primary"
-                }`}
-              >
-                Real
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountType("demo")}
-                className={`flex-1 rounded-lg py-1.5 font-display text-xs font-semibold transition-colors ${
-                  accountType === "demo"
-                    ? "bg-surface text-primary shadow-sm"
-                    : "text-muted hover:text-primary"
-                }`}
-              >
-                Demo
-              </button>
-            </div>
-          </div>
 
           {/* Primary CTA */}
           <button
