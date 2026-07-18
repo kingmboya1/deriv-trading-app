@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useOAuth2 } from "@deriv-com/auth-client";
 import { useDerivSocketStore, disconnectSocket } from "@/lib/derivsocket";
 import type { AccountEntry } from "@/components/AccountSwitcher";
 
@@ -81,22 +82,44 @@ export default function ProfileMenu({ activeAccountId, accounts }: ProfileMenuPr
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────
-  const handleLogout = async () => {
-    setLoggingOut(true);
+  //
+  // Two-phase logout:
+  //   1. OAuth2Logout (from @deriv-com/auth-client) loads Deriv's own
+  //      end-session endpoint (https://oauth.deriv.com/oauth2/sessions/logout)
+  //      in a hidden iframe, which clears Deriv's session cookies server-side
+  //      so the user isn't silently re-authorized on next login.
+  //   2. Once the iframe posts "logout_complete", our consumer function runs:
+  //      close the WebSocket (intentional close — no reconnect loop), expire
+  //      our auth cookies via /api/auth/logout, then navigate to root.
+  //      localStorage (theme) is never touched.
+  //
+  // useOAuth2 is the correct API for this app: it targets the traditional
+  // Deriv OAuth2 session endpoint directly, without requiring OIDC UserManager
+  // state that this app's custom authorization_code flow never sets up.
 
-    // 1. Close the WebSocket cleanly — intentional close, no reconnect loop.
-    //    Uses the same intentionalClose flag pattern as the account switcher fix.
+  const consumerLogout = useCallback(async () => {
+    // Close the WebSocket cleanly — reuses the intentionalClose flag so no
+    // reconnect attempt or error state fires.
     disconnectSocket();
 
-    // 2. Expire all auth cookies server-side.
-    //    localStorage (theme) is NOT touched.
+    // Expire all auth cookies server-side. localStorage (theme) is untouched.
     await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
 
-    // 3. Hard-navigate to root so the server-side auth check in / and
-    //    /dashboard both see the cleared cookies immediately.
+    // Navigate to root — server component guard in page.tsx will confirm
+    // the cookies are gone and show the sign-in screen.
     router.push("/");
-    // router.refresh() is intentionally omitted — router.push("/") causes a
-    // full navigation, which re-runs the server component guard in page.tsx.
+  }, [router]);
+
+  // useOAuth2 must be called at the top level of the component (hook rules).
+  // It wraps our consumer logout with Deriv's iframe-based session teardown.
+  const { OAuth2Logout } = useOAuth2(consumerLogout);
+
+  const handleLogout = () => {
+    setLoggingOut(true);
+    // OAuth2Logout is async but we deliberately don't await it here so the
+    // button shows the spinner immediately. The consumer function redirects
+    // the page when done, so there's no need to reset loggingOut.
+    void OAuth2Logout();
   };
 
   return (
