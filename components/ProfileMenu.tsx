@@ -13,7 +13,8 @@ interface ProfileMenuProps {
   accounts: AccountEntry[];
 }
 
-/** Returns the first character of `id` uppercased, for the avatar fallback. */
+/** Returns the first character of `id` uppercased, for the avatar fallback.
+ *  Uses the loginid (account_id), e.g. "CR1234567" → "C", "VRTC456" → "V". */
 function avatarLetter(id: string): string {
   return (id[0] ?? "?").toUpperCase();
 }
@@ -131,7 +132,7 @@ export default function ProfileMenu({ activeAccountId, accounts }: ProfileMenuPr
         disabled={loggingOut}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label="Open profile menu"
+        aria-label={`Profile menu — ${displayId}`}
         className={`
           inline-flex h-9 w-9 items-center justify-center rounded-full border
           font-display text-sm font-semibold transition-colors disabled:opacity-60
@@ -185,16 +186,20 @@ export default function ProfileMenu({ activeAccountId, accounts }: ProfileMenuPr
                 {avatarLetter(displayId)}
               </span>
               <div className="min-w-0">
+                {/* Primary: loginid · currency — the actual account identity */}
                 <p className="truncate font-mono text-sm font-medium text-primary">
                   {displayId}
+                  {currency ? (
+                    <span className="text-muted"> · {currency}</span>
+                  ) : null}
                 </p>
+                {/* Secondary: account type (Real / Demo) */}
                 <p className="font-display text-xs text-muted">
                   {displayType === "real"
                     ? "Real account"
                     : displayType === "demo"
                     ? "Demo account"
                     : "Account"}
-                  {currency ? ` · ${currency}` : ""}
                 </p>
               </div>
             </div>
