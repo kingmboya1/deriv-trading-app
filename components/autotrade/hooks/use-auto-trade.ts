@@ -236,9 +236,10 @@ export function useAutoTrade(): UseAutoTradeReturn {
 
   // ── Portfolio watcher — primary settlement path ───────────────────────────
   //
-  // This fires on every portfolio update from the existing store subscription
-  // (balance, portfolio, transaction messages). Covers the normal case where
-  // the connection stays healthy.
+  // Uses isContractSettled from derivsocket for broad settlement detection:
+  // covers status "won"/"lost"/"sold"/"expired", is_sold flag, sell_time, etc.
+  // Also handles profit arriving as a string (Deriv returns strings in some
+  // proposal_open_contract variants).
 
   const portfolio = useDerivSocketStore((s) => s.portfolio);
 
@@ -246,13 +247,36 @@ export function useAutoTrade(): UseAutoTradeReturn {
     const contractId = pendingContractIdRef.current;
     if (contractId === null) return;
 
-    const entry  = portfolio[contractId];
+    const entry = portfolio[contractId];
     if (!entry) return;
 
-    const status = typeof entry.status === "string" ? entry.status.toLowerCase() : "";
-    const profit = typeof entry.profit === "number" ? entry.profit : 0;
+    // Broad settlement check — mirrors derivsocket.ts's isContractSettled logic
+    const rawStatus   = typeof entry.status === "string" ? entry.status.toLowerCase() : "";
+    const isSold      = entry.is_sold === true || (entry.is_sold as unknown) === 1;
+    const hasSellTime = typeof entry.sell_time === "number";
+    const isSettled   =
+      isSold ||
+      hasSellTime ||
+      ["won", "lost", "sold", "expired", "settled", "closed"].includes(rawStatus);
 
-    handleSettlementRef.current(contractId, status, profit);
+    if (!isSettled) return;
+
+    // Normalise profit — Deriv sends it as a string in some variants
+    const rawProfit = entry.profit;
+    const profit =
+      typeof rawProfit === "number"
+        ? rawProfit
+        : typeof rawProfit === "string"
+        ? parseFloat(rawProfit)
+        : 0;
+
+    // Derive win/loss from status or profit sign when status is ambiguous
+    const isWin =
+      rawStatus === "won" ||
+      (rawStatus !== "lost" && !Number.isNaN(profit) && profit > 0);
+    const normalizedStatus = isWin ? "won" : "lost";
+
+    handleSettlementRef.current(contractId, normalizedStatus, Number.isNaN(profit) ? 0 : profit);
   }, [portfolio]);
 
   // ── Heartbeat ping — keeps the WS alive every 30 s while bot is running ──
@@ -304,11 +328,17 @@ export function useAutoTrade(): UseAutoTradeReturn {
     // As a belt-and-suspenders backup, also send a one-shot status fetch.
     void (async () => {
       try {
+        // proposal_open_contract response shape:
+        // { proposal_open_contract: { contract_id, status, profit, is_sold,
+        //                             sell_time, ... } }
+        // profit may be a number OR a string depending on the API variant.
         type POCResp = {
           proposal_open_contract?: {
-            contract_id: number;
+            contract_id?: number;
             status?: string;
-            profit?: number;
+            profit?: number | string;
+            is_sold?: boolean | number;
+            sell_time?: number;
           };
         };
         const resp = await useDerivSocketStore.getState().request<POCResp>({
@@ -319,16 +349,33 @@ export function useAutoTrade(): UseAutoTradeReturn {
         const poc = resp.proposal_open_contract;
         if (!poc) return;
 
-        const status = typeof poc.status === "string" ? poc.status.toLowerCase() : "";
-        const profit = typeof poc.profit === "number" ? poc.profit : 0;
+        // Broad settlement detection — mirrors portfolio watcher logic
+        const rawStatus   = typeof poc.status === "string" ? poc.status.toLowerCase() : "";
+        const isSold      = poc.is_sold === true || poc.is_sold === 1;
+        const hasSellTime = typeof poc.sell_time === "number";
+        const isSettled   =
+          isSold ||
+          hasSellTime ||
+          ["won", "lost", "sold", "expired", "settled", "closed"].includes(rawStatus);
 
-        // If already settled, drive the settlement handler directly.
-        // If still open, the portfolio watcher will catch it when the next
-        // proposal_open_contract stream message arrives.
-        handleSettlementRef.current(contractId, status, profit);
+        if (!isSettled) return; // contract still open — portfolio stream will handle it
+
+        // Normalise profit (may arrive as string)
+        const rawProfit = poc.profit;
+        const profit =
+          typeof rawProfit === "number"
+            ? rawProfit
+            : typeof rawProfit === "string"
+            ? parseFloat(rawProfit)
+            : 0;
+
+        const isWin          = rawStatus === "won" || (rawStatus !== "lost" && !Number.isNaN(profit) && profit > 0);
+        const normalizedStatus = isWin ? "won" : "lost";
+
+        handleSettlementRef.current(contractId, normalizedStatus, Number.isNaN(profit) ? 0 : profit);
       } catch {
-        // Request failed (e.g. contract not found) — bot will remain pending
-        // until the next portfolio message or the user manually stops it.
+        // Request failed — bot remains pending until next portfolio message
+        // or the user manually stops it.
       }
     })();
   }, [wsStatus]);
