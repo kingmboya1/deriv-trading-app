@@ -13,11 +13,12 @@ import { connectDerivWS, disconnectDerivWS } from "@/lib/deriv-ws";
 type ConnectionStatus = "connecting" | "connected" | "failed" | "closed";
 
 interface PriceChartProps {
-  onSymbolChange?: (symbol: string) => void;
+  /** Symbol to stream — controlled by the parent (MarketPanel pill row).
+   *  When this changes, PriceChart switches the WS tick subscription. */
+  symbol?: string;
   onSpotChange?: (spot: number | null) => void;
 }
 
-const symbols = ["R_10", "R_50", "R_75", "R_100"];
 const symbolLabels: Record<string, string> = {
   R_10:  "Volatility 10 Index",
   R_50:  "Volatility 50 Index",
@@ -45,13 +46,14 @@ function getAccountIdentity(wsUrl?: string): string {
   return `${accountType}:${normalizedAccountId}`;
 }
 
-export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
+export function PriceChart({ symbol = "R_10", onSpotChange }: PriceChartProps) {
   const [prices, setPrices] = useState<number[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [selectedSymbol, setSelectedSymbol] = useState("R_10");
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const socketRef = useRef<ReturnType<typeof connectDerivWS>>(null);
   const activeAccountIdentityRef = useRef<string | null>(null);
+  // Track the last symbol we subscribed to so we only re-subscribe on change
+  const subscribedSymbolRef = useRef<string | null>(null);
 
   useEffect(() => {
     const loadSocket = async () => {
@@ -127,33 +129,32 @@ export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
   }, []);
 
   useEffect(() => {
-    onSymbolChange?.(selectedSymbol);
-  }, [onSymbolChange, selectedSymbol]);
-
-  useEffect(() => {
     onSpotChange?.(currentPrice);
   }, [currentPrice, onSpotChange]);
 
-  const handleSymbolChange = (symbol: string) => {
+  // When the parent changes the symbol prop, switch the WS subscription.
+  // This is the single place symbol changes are acted upon — no dropdown.
+  useEffect(() => {
+    if (subscribedSymbolRef.current === symbol) return; // already on this symbol
+
     const socket = socketRef.current?.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setConnectionStatus("failed");
-      setSelectedSymbol(symbol);
+      // Socket not ready yet — mark the desired symbol so the open handler
+      // picks it up, or the next loadSocket call will use it.
+      subscribedSymbolRef.current = symbol;
+      socketRef.current?.setCurrentSymbol(symbol);
       setPrices([]);
       setCurrentPrice(null);
       return;
     }
 
-    // Update the tracking in the connection before sending new subscription
     socketRef.current?.setCurrentSymbol(symbol);
-
     socket.send(JSON.stringify({ forget_all: "ticks" }));
     socket.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
-
-    setSelectedSymbol(symbol);
+    subscribedSymbolRef.current = symbol;
     setPrices([]);
     setCurrentPrice(null);
-  };
+  }, [symbol]);
 
   const chartData = prices.map((price, index) => ({
     index: index + 1,
@@ -169,40 +170,25 @@ export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
             Live Market
           </p>
           <h2 className="mt-1 font-display text-base font-semibold text-primary">
-            {symbolLabels[selectedSymbol]}
+            {symbolLabels[symbol] ?? symbol}
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Symbol select — hidden from MarketPanel which drives it via pills */}
-          <select
-            value={selectedSymbol}
-            onChange={(event) => handleSymbolChange(event.target.value)}
-            className="rounded-lg border border-hairline bg-card px-3 py-1.5 font-mono text-xs text-primary focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
-          >
-            {symbols.map((symbol) => (
-              <option key={symbol} value={symbol}>
-                {symbol}
-              </option>
-            ))}
-          </select>
-
-          {/* Status badge */}
-          <div className={`rounded-full border px-2.5 py-0.5 font-mono text-xs font-medium ${
-            connectionStatus === "connected"
-              ? "border-gain/30 bg-gain/10 text-gain"
-              : connectionStatus === "failed"
-              ? "border-loss/30 bg-loss/10 text-loss"
-              : "border-hairline bg-card text-muted"
-          }`}>
-            {connectionStatus === "connected"
-              ? "Live"
-              : connectionStatus === "failed"
-              ? "Failed"
-              : connectionStatus === "closed"
-              ? "Closed"
-              : "Connecting"}
-          </div>
+        {/* Status badge only — dropdown removed, pills are the selector */}
+        <div className={`rounded-full border px-2.5 py-0.5 font-mono text-xs font-medium ${
+          connectionStatus === "connected"
+            ? "border-gain/30 bg-gain/10 text-gain"
+            : connectionStatus === "failed"
+            ? "border-loss/30 bg-loss/10 text-loss"
+            : "border-hairline bg-card text-muted"
+        }`}>
+          {connectionStatus === "connected"
+            ? "Live"
+            : connectionStatus === "failed"
+            ? "Failed"
+            : connectionStatus === "closed"
+            ? "Closed"
+            : "Connecting"}
         </div>
       </div>
 

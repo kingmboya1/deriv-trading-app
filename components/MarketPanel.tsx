@@ -36,6 +36,7 @@ interface SpotState {
 }
 
 export default function MarketPanel({ wsUrl }: MarketPanelProps) {
+  // Single source of truth for symbol selection — pills and chart both read this
   const [selectedSymbol, setSelectedSymbol] = useState("R_10");
   // Map of symbol → { current, prev } for direction badges on the cards
   const [spotMap, setSpotMap] = useState<Record<string, SpotState>>(
@@ -52,10 +53,6 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
       },
     }));
   }, [selectedSymbol]);
-
-  const handleSymbolChange = useCallback((symbol: string) => {
-    setSelectedSymbol(symbol);
-  }, []);
 
   return (
     <div className="flex flex-col gap-5">
@@ -185,7 +182,7 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
       {/* ── Chart + Trade panel for selected symbol ──────────────── */}
       <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
         <PriceChart
-          onSymbolChange={handleSymbolChange}
+          symbol={selectedSymbol}
           onSpotChange={handleSpotChange}
         />
         <TradePanel symbol={selectedSymbol} currentSpot={spotMap[selectedSymbol]?.current ?? null} />
