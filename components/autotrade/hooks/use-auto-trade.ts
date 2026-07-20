@@ -90,8 +90,9 @@ export function useAutoTrade(): UseAutoTradeReturn {
   const stateRef              = useRef<BotState>(state);
   const pendingContractIdRef  = useRef<number | null>(null);
   const isPlacingRef          = useRef(false);
-  // Tracks the last ws status we saw so we can detect connected transitions
   const prevWsStatusRef       = useRef<string>("");
+  // Timer ref for the 2-second inter-trade delay — cleared on stop()
+  const nextTradeTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep stateRef in sync so closures always read fresh state
   useEffect(() => {
@@ -151,7 +152,19 @@ export function useAutoTrade(): UseAutoTradeReturn {
         return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "max_stake" as StopReason };
       }
 
-      // All rails clear — continue with next stake
+      // All rails clear — schedule next trade after 2s delay
+      // Clear any existing timer first (guard against double-settlement)
+      if (nextTradeTimerRef.current !== null) {
+        clearTimeout(nextTradeTimerRef.current);
+      }
+      nextTradeTimerRef.current = setTimeout(() => {
+        nextTradeTimerRef.current = null;
+        // Only fire if bot is still running (user may have stopped during delay)
+        if (stateRef.current.isRunning) {
+          void placeTrade(nextStake);
+        }
+      }, 2000);
+
       return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, currentStake: nextStake, sessionTrades: updatedTrades };
     });
 
@@ -381,11 +394,15 @@ export function useAutoTrade(): UseAutoTradeReturn {
   }, [wsStatus]);
 
   // ── Trigger next trade after state settles ────────────────────────────────
+  // NOTE: next-trade scheduling is now owned by handleSettlementRef's 2s timer.
+  // This effect only handles the very first trade when the bot starts (no
+  // pending contract, no timer — placeTrade fires immediately on start).
 
   useEffect(() => {
     if (!state.isRunning) return;
     if (pendingContractIdRef.current !== null) return;
     if (isPlacingRef.current) return;
+    if (nextTradeTimerRef.current !== null) return; // timer already scheduled
     void placeTrade(state.currentStake);
   }, [state.isRunning, state.currentStake, state.consecutiveLosses, placeTrade]);
 
@@ -407,11 +424,20 @@ export function useAutoTrade(): UseAutoTradeReturn {
   }, []);
 
   const stop = useCallback((reason: StopReason = "manual") => {
+    // Clear any pending inter-trade timer so no rogue trade fires after stop
+    if (nextTradeTimerRef.current !== null) {
+      clearTimeout(nextTradeTimerRef.current);
+      nextTradeTimerRef.current = null;
+    }
     pendingContractIdRef.current = null;
     setState((s) => ({ ...s, isRunning: false, stopReason: reason }));
   }, []);
 
   const resetSession = useCallback(() => {
+    if (nextTradeTimerRef.current !== null) {
+      clearTimeout(nextTradeTimerRef.current);
+      nextTradeTimerRef.current = null;
+    }
     pendingContractIdRef.current = null;
     isPlacingRef.current         = false;
     setState({
