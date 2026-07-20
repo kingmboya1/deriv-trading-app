@@ -86,17 +86,77 @@ export function useAutoTrade(): UseAutoTradeReturn {
     error: null,
   });
 
-  // Internal refs so the settlement effect always has fresh values without
-  // needing to be re-created (avoids stale-closure bugs in the portfolio watcher)
-  const configRef = useRef<BotConfig | null>(null);
-  const stateRef = useRef<BotState>(state);
-  const pendingContractIdRef = useRef<number | null>(null);
-  const isPlacingRef = useRef(false); // guard against double-firing
+  const configRef             = useRef<BotConfig | null>(null);
+  const stateRef              = useRef<BotState>(state);
+  const pendingContractIdRef  = useRef<number | null>(null);
+  const isPlacingRef          = useRef(false);
+  // Tracks the last ws status we saw so we can detect connected transitions
+  const prevWsStatusRef       = useRef<string>("");
 
-  // Keep stateRef in sync
+  // Keep stateRef in sync so closures always read fresh state
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // ── Shared settlement handler ─────────────────────────────────────────────
+  //
+  // Extracted into a stable ref so both the portfolio watcher AND the
+  // reconnect recovery effect call identical code — no duplication.
+  //
+  // Returns true if settlement was processed, false if skipped.
+
+  const handleSettlementRef = useRef<(
+    contractId: number,
+    statusStr: string,
+    profit: number
+  ) => boolean>(() => false);
+
+  handleSettlementRef.current = (contractId, statusStr, profit) => {
+    if (pendingContractIdRef.current !== contractId) return false;
+
+    const settled = statusStr === "won" || statusStr === "lost";
+    if (!settled) return false;
+
+    // Clear pending immediately to prevent double-firing
+    pendingContractIdRef.current = null;
+
+    const won    = statusStr === "won";
+    const config = configRef.current;
+    if (!config) return false;
+
+    setState((prev) => {
+      const newPL           = round2(prev.accumulatedPL + profit);
+      const newConsecLosses = won ? 0 : prev.consecutiveLosses + 1;
+      const nextStake       = won
+        ? config.baseStake
+        : round2(prev.currentStake * config.multiplier);
+
+      const updatedTrades = prev.sessionTrades.map((t) =>
+        t.contractId === contractId
+          ? { ...t, result: won ? ("win" as const) : ("loss" as const), profit: round2(profit) }
+          : t
+      );
+
+      // ── Safety rails ─────────────────────────────────────────────────
+      if (newConsecLosses >= config.maxConsecutiveLosses) {
+        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "max_losses" as StopReason };
+      }
+      if (newPL >= config.takeProfitLimit) {
+        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "take_profit" as StopReason };
+      }
+      if (newPL <= -config.stopLossLimit) {
+        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "stop_loss" as StopReason };
+      }
+      if (nextStake > config.maxStakeCeiling) {
+        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "max_stake" as StopReason };
+      }
+
+      // All rails clear — continue with next stake
+      return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, currentStake: nextStake, sessionTrades: updatedTrades };
+    });
+
+    return true;
+  };
 
   // ── Core: place one trade ─────────────────────────────────────────────────
 
@@ -104,7 +164,7 @@ export function useAutoTrade(): UseAutoTradeReturn {
     const config = configRef.current;
     if (!config) return;
 
-    const wsState = useDerivSocketStore.getState();
+    const wsState  = useDerivSocketStore.getState();
     const currency = wsState.auth.currency?.toUpperCase();
     if (!currency) {
       setState((s) => ({ ...s, isRunning: false, error: "Currency not available — is the WebSocket connected?" }));
@@ -112,12 +172,12 @@ export function useAutoTrade(): UseAutoTradeReturn {
     }
 
     const contractConfig = CONTRACT_TYPES[config.tradeMode];
-    const contractType = contractConfig.contractTypes[config.contractSide];
+    const contractType   = contractConfig.contractTypes[config.contractSide];
 
     isPlacingRef.current = true;
 
     try {
-      // 1. One-shot proposal (no subscribe: 1) to avoid stale stream updates
+      // One-shot proposal — no subscribe:1 to avoid stale stream updates
       const proposalPayload: Record<string, unknown> = {
         proposal: 1,
         amount: round2(stake),
@@ -127,7 +187,6 @@ export function useAutoTrade(): UseAutoTradeReturn {
         duration: config.duration,
         duration_unit: config.durationUnit,
         underlying_symbol: config.symbol,
-        // deliberately omitting subscribe: 1
       };
       if (contractConfig.barrier && config.barrier.trim()) {
         proposalPayload.barrier = config.barrier.trim();
@@ -135,12 +194,11 @@ export function useAutoTrade(): UseAutoTradeReturn {
 
       type ProposalResp = { proposal?: { id: string; ask_price: number; payout: number } };
       const proposalResp = await wsState.request<ProposalResp>(proposalPayload);
-      const proposal = proposalResp.proposal;
+      const proposal     = proposalResp.proposal;
       if (!proposal?.id || proposal.ask_price === undefined) {
         throw new Error("Proposal not returned from server.");
       }
 
-      // 2. Buy
       type BuyResp = { buy?: { contract_id: number; buy_price: number; payout: number } };
       const buyResp = await wsState.request<BuyResp>({
         buy: proposal.id,
@@ -151,7 +209,6 @@ export function useAutoTrade(): UseAutoTradeReturn {
 
       pendingContractIdRef.current = buy.contract_id;
 
-      // 3. Register trade as pending in session history
       const record: TradeRecord = {
         id: makeTradeId(),
         contractId: buy.contract_id,
@@ -177,7 +234,11 @@ export function useAutoTrade(): UseAutoTradeReturn {
     }
   }, []);
 
-  // ── Portfolio watcher — settlement detection ──────────────────────────────
+  // ── Portfolio watcher — primary settlement path ───────────────────────────
+  //
+  // This fires on every portfolio update from the existing store subscription
+  // (balance, portfolio, transaction messages). Covers the normal case where
+  // the connection stays healthy.
 
   const portfolio = useDerivSocketStore((s) => s.portfolio);
 
@@ -185,70 +246,108 @@ export function useAutoTrade(): UseAutoTradeReturn {
     const contractId = pendingContractIdRef.current;
     if (contractId === null) return;
 
-    const entry = portfolio[contractId];
+    const entry  = portfolio[contractId];
     if (!entry) return;
 
     const status = typeof entry.status === "string" ? entry.status.toLowerCase() : "";
-    const settled = status === "won" || status === "lost";
-    if (!settled) return;
-
-    // Clear pending so this handler doesn't re-fire
-    pendingContractIdRef.current = null;
-
-    const won = status === "won";
     const profit = typeof entry.profit === "number" ? entry.profit : 0;
-    const config = configRef.current;
-    if (!config) return;
 
-    setState((prev) => {
-      const newPL = round2(prev.accumulatedPL + profit);
-      const newConsecLosses = won ? 0 : prev.consecutiveLosses + 1;
-      const nextStake = won
-        ? config.baseStake
-        : round2(prev.currentStake * config.multiplier);
-
-      // Update trade record
-      const updatedTrades = prev.sessionTrades.map((t) =>
-        t.contractId === contractId
-          ? { ...t, result: won ? ("win" as const) : ("loss" as const), profit: round2(profit) }
-          : t
-      );
-
-      // ── Safety rail checks ──────────────────────────────────────────
-      if (newConsecLosses >= config.maxConsecutiveLosses) {
-        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "max_losses" };
-      }
-      if (newPL >= config.takeProfitLimit) {
-        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "take_profit" };
-      }
-      if (newPL <= -config.stopLossLimit) {
-        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "stop_loss" };
-      }
-      if (nextStake > config.maxStakeCeiling) {
-        return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, sessionTrades: updatedTrades, isRunning: false, stopReason: "max_stake" };
-      }
-
-      // All clear — queue next trade
-      return { ...prev, accumulatedPL: newPL, consecutiveLosses: newConsecLosses, currentStake: nextStake, sessionTrades: updatedTrades };
-    });
+    handleSettlementRef.current(contractId, status, profit);
   }, [portfolio]);
 
-  // ── Trigger next trade after state settles (when still running) ───────────
+  // ── Heartbeat ping — keeps the WS alive every 30 s while bot is running ──
+  //
+  // Uses the store's send() which throws if the socket is closed — the catch
+  // is intentionally silent because the reconnect watcher handles recovery.
+
+  useEffect(() => {
+    if (!state.isRunning) return;
+
+    const id = window.setInterval(() => {
+      try {
+        useDerivSocketStore.getState().send({ ping: 1 });
+      } catch {
+        // Socket not open — reconnect watcher will handle recovery
+      }
+    }, 30_000);
+
+    return () => window.clearInterval(id);
+  }, [state.isRunning]);
+
+  // ── Reconnect recovery — re-fetch pending contract after a drop ──────────
+  //
+  // Watches the WS status. When it transitions TO "Connected" while the bot
+  // is running with a pending contract, sends a one-shot proposal_open_contract
+  // request to fetch the current state of that contract. If it has already
+  // settled during the disconnection window, the response triggers settlement
+  // via the same handleSettlementRef handler used by the portfolio watcher.
+
+  const wsStatus = useDerivSocketStore((s) => s.status);
+
+  useEffect(() => {
+    const justReconnected =
+      wsStatus === "Connected" &&
+      prevWsStatusRef.current !== "Connected";
+
+    prevWsStatusRef.current = wsStatus;
+
+    if (!justReconnected) return;
+    if (!stateRef.current.isRunning) return;
+
+    const contractId = pendingContractIdRef.current;
+    if (contractId === null) return;
+
+    // Re-subscribe to get the latest state of the pending contract.
+    // The store will process the response as a proposal_open_contract message,
+    // which the handleMessage handler in derivsocket.ts writes into portfolio —
+    // that triggers the portfolio watcher above.
+    // As a belt-and-suspenders backup, also send a one-shot status fetch.
+    void (async () => {
+      try {
+        type POCResp = {
+          proposal_open_contract?: {
+            contract_id: number;
+            status?: string;
+            profit?: number;
+          };
+        };
+        const resp = await useDerivSocketStore.getState().request<POCResp>({
+          proposal_open_contract: 1,
+          contract_id: contractId,
+        });
+
+        const poc = resp.proposal_open_contract;
+        if (!poc) return;
+
+        const status = typeof poc.status === "string" ? poc.status.toLowerCase() : "";
+        const profit = typeof poc.profit === "number" ? poc.profit : 0;
+
+        // If already settled, drive the settlement handler directly.
+        // If still open, the portfolio watcher will catch it when the next
+        // proposal_open_contract stream message arrives.
+        handleSettlementRef.current(contractId, status, profit);
+      } catch {
+        // Request failed (e.g. contract not found) — bot will remain pending
+        // until the next portfolio message or the user manually stops it.
+      }
+    })();
+  }, [wsStatus]);
+
+  // ── Trigger next trade after state settles ────────────────────────────────
 
   useEffect(() => {
     if (!state.isRunning) return;
     if (pendingContractIdRef.current !== null) return;
     if (isPlacingRef.current) return;
-    // No pending contract and still running — place next trade
     void placeTrade(state.currentStake);
   }, [state.isRunning, state.currentStake, state.consecutiveLosses, placeTrade]);
 
   // ── Public API ────────────────────────────────────────────────────────────
 
   const start = useCallback((config: BotConfig) => {
-    configRef.current = config;
+    configRef.current            = config;
     pendingContractIdRef.current = null;
-    isPlacingRef.current = false;
+    isPlacingRef.current         = false;
     setState({
       isRunning: true,
       currentStake: config.baseStake,
@@ -267,7 +366,7 @@ export function useAutoTrade(): UseAutoTradeReturn {
 
   const resetSession = useCallback(() => {
     pendingContractIdRef.current = null;
-    isPlacingRef.current = false;
+    isPlacingRef.current         = false;
     setState({
       isRunning: false,
       currentStake: configRef.current?.baseStake ?? 1,
