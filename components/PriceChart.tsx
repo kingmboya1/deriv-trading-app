@@ -17,12 +17,11 @@ interface PriceChartProps {
   onSpotChange?: (spot: number | null) => void;
 }
 
-const symbols = ["R_10", "R_25", "R_50", "R_75", "R_100"];
+const symbols = ["R_10", "R_50", "R_75", "R_100"];
 const symbolLabels: Record<string, string> = {
-  R_10: "Volatility 10 Index",
-  R_25: "Volatility 25 Index",
-  R_50: "Volatility 50 Index",
-  R_75: "Volatility 75 Index",
+  R_10:  "Volatility 10 Index",
+  R_50:  "Volatility 50 Index",
+  R_75:  "Volatility 75 Index",
   R_100: "Volatility 100 Index",
 };
 
@@ -162,19 +161,24 @@ export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
   }));
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <section className="rounded-2xl border border-hairline bg-surface p-5">
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">
+          <p className="font-display text-xs font-semibold uppercase tracking-[0.3em] text-muted">
             Live Market
           </p>
-          <h2 className="mt-2 text-lg font-semibold">{symbolLabels[selectedSymbol]}</h2>
+          <h2 className="mt-1 font-display text-base font-semibold text-primary">
+            {symbolLabels[selectedSymbol]}
+          </h2>
         </div>
+
         <div className="flex items-center gap-2">
+          {/* Symbol select — hidden from MarketPanel which drives it via pills */}
           <select
             value={selectedSymbol}
             onChange={(event) => handleSymbolChange(event.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+            className="rounded-lg border border-hairline bg-card px-3 py-1.5 font-mono text-xs text-primary focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
           >
             {symbols.map((symbol) => (
               <option key={symbol} value={symbol}>
@@ -182,42 +186,44 @@ export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
               </option>
             ))}
           </select>
-          <div
-            className={`rounded-full border px-3 py-1 text-sm ${
-              connectionStatus === "connected"
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                : connectionStatus === "failed"
-                  ? "border-rose-500/40 bg-rose-500/10 text-rose-300"
-                  : "border-sky-500/40 bg-sky-500/10 text-sky-300"
-            }`}
-          >
+
+          {/* Status badge */}
+          <div className={`rounded-full border px-2.5 py-0.5 font-mono text-xs font-medium ${
+            connectionStatus === "connected"
+              ? "border-gain/30 bg-gain/10 text-gain"
+              : connectionStatus === "failed"
+              ? "border-loss/30 bg-loss/10 text-loss"
+              : "border-hairline bg-card text-muted"
+          }`}>
             {connectionStatus === "connected"
               ? "Live"
               : connectionStatus === "failed"
-                ? "Connection failed"
-                : connectionStatus === "closed"
-                  ? "Disconnected"
-                  : "Connecting..."}
+              ? "Failed"
+              : connectionStatus === "closed"
+              ? "Closed"
+              : "Connecting"}
           </div>
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950 p-4">
-        <p className="text-sm text-slate-400">Current price</p>
-        <p className="mt-2 text-3xl font-semibold text-white">
-          {currentPrice !== null ? currentPrice.toFixed(2) : "--"}
+      {/* Current price */}
+      <div className="mt-4 rounded-xl border border-hairline bg-card px-4 py-3">
+        <p className="font-display text-xs font-medium text-muted">Current price</p>
+        <p className="mt-1 font-mono text-2xl font-medium tabular-nums text-primary">
+          {currentPrice !== null ? currentPrice.toFixed(2) : "—"}
         </p>
-        {connectionStatus === "failed" ? (
-          <p className="mt-2 text-sm text-rose-400">
-            The live feed could not connect for this account. Refresh and try again.
+        {connectionStatus === "failed" && (
+          <p className="mt-1 font-sans text-xs text-loss">
+            Live feed failed. Refresh to retry.
           </p>
-        ) : null}
+        )}
       </div>
 
-      <div className="mt-6 h-64 rounded-2xl border border-slate-800 bg-slate-950 p-3">
+      {/* Chart */}
+      <div className="mt-4 h-56 rounded-xl border border-hairline bg-card p-3">
         {currentPrice === null ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-400">
-            Connecting...
+          <div className="flex h-full items-center justify-center font-mono text-xs text-muted">
+            {connectionStatus === "failed" ? "No data" : "Connecting…"}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -231,7 +237,7 @@ export function PriceChart({ onSymbolChange, onSpotChange }: PriceChartProps) {
               <Line
                 type="monotone"
                 dataKey="price"
-                stroke="#22d3ee"
+                stroke="var(--color-accent)"
                 strokeWidth={2}
                 dot={false}
               />
