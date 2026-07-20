@@ -68,8 +68,13 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
         </span>
       </div>
 
-      {/* ── Pill symbol selector row ─────────────────────────────── */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Market symbol selector">
+      {/* ── Pill symbol selector row — horizontal scroll on mobile ── */}
+      <div
+        className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+        role="tablist"
+        aria-label="Market symbol selector"
+        style={{ scrollbarWidth: "none" }}
+      >
         {SYMBOLS.map((s) => {
           const isActive = selectedSymbol === s.id;
           const spot = spotMap[s.id];
@@ -84,14 +89,13 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
               role="tab"
               aria-selected={isActive}
               onClick={() => setSelectedSymbol(s.id)}
-              className={`flex items-center gap-2 rounded-full border px-4 py-1.5 font-display text-sm font-semibold transition-colors ${
+              className={`flex flex-none items-center gap-2 rounded-full border px-4 py-1.5 font-display text-sm font-semibold transition-colors ${
                 isActive
                   ? "border-accent bg-accent/15 text-accent"
                   : "border-hairline bg-surface text-muted hover:border-accent/40 hover:text-primary"
               }`}
             >
               <span>{s.label}</span>
-              {/* Live price on pill when available */}
               {spot?.current !== null && (
                 <span className={`font-mono text-xs tabular-nums ${
                   up === true ? "text-gain" : up === false ? "text-loss" : "text-muted"
@@ -104,8 +108,8 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
         })}
       </div>
 
-      {/* ── Market card grid ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* ── Market card grid: 1 col mobile → 2 tablet → 4 desktop ── */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
         {SYMBOLS.map((s) => {
           const isActive = selectedSymbol === s.id;
           const spot = spotMap[s.id];
@@ -179,8 +183,8 @@ export default function MarketPanel({ wsUrl }: MarketPanelProps) {
         })}
       </div>
 
-      {/* ── Chart + Trade panel for selected symbol ──────────────── */}
-      <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+      {/* ── Chart + Trade panel: stacked on mobile, side-by-side lg+ ─ */}
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[2fr_1fr]">
         <PriceChart
           symbol={selectedSymbol}
           onSpotChange={handleSpotChange}

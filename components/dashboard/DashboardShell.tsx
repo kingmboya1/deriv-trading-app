@@ -65,12 +65,14 @@ export default function DashboardShell({
       {/* ── Body: sidebar + main ────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1">
 
-        {/* Sidebar */}
+        {/* Sidebar — hidden on mobile (bottom tab bar is used instead) */}
         <SidebarNav active={activeSection} onChange={setActiveSection} />
 
-        {/* Main content area */}
-        <main className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="mx-auto flex max-w-6xl flex-col gap-5">
+        {/* Main content area
+            pb-16 on mobile reserves space above the fixed bottom tab bar.
+            px-4 on mobile → px-6 on sm and above.                        */}
+        <main className="flex-1 overflow-y-auto px-4 py-4 pb-20 sm:px-6 sm:py-5 md:pb-5">
+          <div className="mx-auto flex max-w-6xl flex-col gap-4 sm:gap-5">
 
             {/* Summary card row — always visible regardless of active section */}
             <BalanceBar realBalance={realBalance} demoBalance={demoBalance} />
