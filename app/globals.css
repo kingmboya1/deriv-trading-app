@@ -51,3 +51,57 @@ body {
     text-wrap: balance;
   }
 }
+
+/* ── Landing page animations (pure CSS, no framer-motion) ──── */
+
+/* Splash: logo scale-in */
+@keyframes splash-logo-in {
+  from { opacity: 0; transform: scale(0.72); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Splash: word slide-up */
+@keyframes splash-words-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Splash: progress bar fill */
+@keyframes progress-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+/* Splash: full screen fade-out */
+@keyframes splash-out {
+  from { opacity: 1; }
+  to   { opacity: 0; pointer-events: none; }
+}
+
+/* Hero / content: fade-up on mount */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards: fade-up for IntersectionObserver stagger */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Ticker marquee — same pattern as autotrend */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Utility classes consumed by landing components */
+.landing-splash-logo   { animation: splash-logo-in  0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.landing-splash-title  { animation: splash-words-in 0.4s ease-out 0.2s both; }
+.landing-splash-sub    { animation: splash-words-in 0.4s ease-out 0.35s both; }
+.landing-splash-bar    { animation: progress-fill   1.4s ease-in-out 0.5s both; }
+.landing-splash-out    { animation: splash-out      0.55s ease-in-out forwards; }
+.landing-hero-in       { animation: fade-up         0.6s ease-out 0.15s both; }
+.landing-card-in       { animation: card-in         0.45s ease-out both; }
+.landing-marquee       { animation: marquee 32s linear infinite; }

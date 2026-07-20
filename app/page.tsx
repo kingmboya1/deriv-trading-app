@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import SignInClient from "./SignInClient";
+import LandingPage from "@/components/landing/LandingPage";
 
 /**
  * Root page — server component.
  *
- * If the user already has a valid session token, skip straight to the
- * dashboard.  Otherwise render the sign-in screen.
+ * If the user already has a valid session token, redirect straight to the
+ * dashboard. Otherwise render the full landing page (splash → hero → features).
  */
 export default function Home() {
   const cookieStore = cookies();
@@ -16,5 +16,5 @@ export default function Home() {
     redirect("/dashboard");
   }
 
-  return <SignInClient />;
+  return <LandingPage />;
 }
