@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -52,10 +51,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Persistent top bar — visible on every page */}
-        <div className="fixed right-4 top-4 z-50">
-          <ThemeToggle />
-        </div>
         {children}
       </body>
     </html>
