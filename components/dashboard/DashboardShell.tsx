@@ -23,6 +23,7 @@ import { TradePanel } from "@/components/TradePanel";
 import Portfolio from "@/components/Portfolio";
 import ProfileMenu from "@/components/ProfileMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import AutoTradePanel from "@/components/autotrade/AutoTradePanel";
 import type { AccountEntry } from "@/components/AccountSwitcher";
 
 interface DashboardShellProps {
@@ -90,6 +91,10 @@ export default function DashboardShell({
 
             {activeSection === "portfolio" && (
               <Portfolio />
+            )}
+
+            {activeSection === "autotrade" && (
+              <AutoTradePanel />
             )}
           </div>
         </main>
