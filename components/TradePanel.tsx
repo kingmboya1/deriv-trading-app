@@ -68,7 +68,7 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
   const [durationError, setDurationError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error" | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingButton, setSubmittingButton] = useState<0 | 1 | null>(null);
 
   const status = useDerivSocketStore((state) => state.status);
   const connect = useDerivSocketStore((state) => state.connect);
@@ -102,7 +102,7 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
     }
   }, [currentContract.duration.kind]);
 
-  const handleTrade = async (contractType: BuyContractType) => {
+  const handleTrade = async (contractType: BuyContractType, buttonIndex: 0 | 1) => {
     if (status !== "Connected") {
       setMessage("WebSocket is not connected yet.");
       return;
@@ -123,7 +123,7 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmittingButton(buttonIndex);
     setMessage(null);
     setMessageType(null);
     setDurationError(null);
@@ -133,7 +133,7 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
 
     if (!currency) {
       setMessage("Account currency is not available yet.");
-      setIsSubmitting(false);
+      setSubmittingButton(null);
       return;
     }
 
@@ -226,7 +226,7 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
       setMessage(error instanceof Error ? error.message : "Trade failed.");
       setMessageType("error");
     } finally {
-      setIsSubmitting(false);
+      setSubmittingButton(null);
     }
   };
 
@@ -429,19 +429,19 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
         <div className="flex gap-2 pt-1">
           <button
             type="button"
-            onClick={() => void handleTrade(currentContract.contractTypes[0])}
-            disabled={isSubmitting || status !== "Connected" || durationError !== null}
+            onClick={() => void handleTrade(currentContract.contractTypes[0], 0)}
+            disabled={submittingButton !== null || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-lg bg-gain px-4 py-2.5 font-display text-sm font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSubmitting ? "Placing…" : currentContract.buttonLabels[0]}
+            {submittingButton === 0 ? "Placing…" : currentContract.buttonLabels[0]}
           </button>
           <button
             type="button"
-            onClick={() => void handleTrade(currentContract.contractTypes[1])}
-            disabled={isSubmitting || status !== "Connected" || durationError !== null}
+            onClick={() => void handleTrade(currentContract.contractTypes[1], 1)}
+            disabled={submittingButton !== null || status !== "Connected" || durationError !== null}
             className="flex-1 rounded-lg bg-loss px-4 py-2.5 font-display text-sm font-semibold text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSubmitting ? "Placing…" : currentContract.buttonLabels[1]}
+            {submittingButton === 1 ? "Placing…" : currentContract.buttonLabels[1]}
           </button>
         </div>
 
