@@ -18,14 +18,14 @@ export default function LandingFooter() {
               />
             </svg>
           </div>
-          <span className="font-display text-sm font-bold text-primary">Deriv Trading</span>
+          <span className="font-display text-sm font-bold text-primary">AutoTrendX</span>
         </div>
 
         <p className="font-sans text-xs text-muted">
           Trading involves risk. Only trade with money you can afford to lose.
         </p>
         <p className="font-sans text-xs text-muted">
-          © {new Date().getFullYear()} Deriv Trading App. Not affiliated with Deriv Ltd.
+          © {new Date().getFullYear()} AutoTrendX. Not affiliated with Deriv Ltd.
         </p>
       </div>
     </footer>
