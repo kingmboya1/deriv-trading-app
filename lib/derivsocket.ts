@@ -62,6 +62,7 @@ interface DerivSocketStore {
   activeAccountType: "real" | "demo" | "unknown";
   balance: number | null;
   portfolio: Record<number, OpenContract>;
+  activeSymbols: { id: string; label: string }[];
   auth: SocketAuthState;
   connect: () => Promise<void>;
   reconnect: () => Promise<void>;
@@ -236,6 +237,7 @@ const resetAccountScopedState = (set: DerivSocketSet) => {
     activeAccountType: "unknown",
     balance: null,
     portfolio: {},
+    activeSymbols: [],
     auth: {
       accessToken: null,
       accountId: null,
@@ -253,6 +255,7 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   activeAccountType: "unknown",
   balance: null,
   portfolio: {},
+  activeSymbols: [],
   auth: {
     accessToken: null,
     accountId: null,
@@ -529,6 +532,8 @@ const connectSocket = (
       newSocket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
       newSocket.send(JSON.stringify({ portfolio: 1 }));
       newSocket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
+      // Fetch tradeable symbols dynamically
+      newSocket.send(JSON.stringify({ active_symbols: "brief", product_type: "basic" }));
     } catch (error) {
       console.error("[deriv-socket] Failed to send subscriptions:", error);
     }
@@ -638,6 +643,19 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
       pending.resolve(payload);
     }
 
+    return;
+  }
+
+  // Handle active_symbols response
+  if (Array.isArray(payload.active_symbols)) {
+    const symbols = (payload.active_symbols as Record<string, unknown>[])
+      .filter((s) => s.is_trading_suspended === 0 || s.is_trading_suspended === false)
+      .map((s) => ({
+        id: String(s.symbol ?? ""),
+        label: String(s.display_name ?? s.symbol ?? ""),
+      }))
+      .filter((s) => s.id !== "");
+    if (symbols.length > 0) set({ activeSymbols: symbols });
     return;
   }
 
