@@ -102,7 +102,7 @@ export default function SignInClient() {
             </svg>
           </div>
           <p className="font-display text-sm font-semibold uppercase tracking-[0.25em] text-muted">
-            Deriv Trading
+            AutoTrendX
           </p>
         </div>
 

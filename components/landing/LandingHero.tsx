@@ -25,14 +25,6 @@ export default function LandingHero({ onStartTrading, isLoading }: LandingHeroPr
     <section className="landing-hero-in px-5 pt-44 pb-20 text-center sm:px-8 sm:pt-52">
       <div className="mx-auto max-w-3xl">
 
-        {/* Badge pill — mirrors autotrend's green pill */}
-        <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 font-display text-xs font-semibold uppercase tracking-widest text-accent">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
-            <path d="M5 0L6.12 3.38H9.51L6.88 5.47L7.94 8.09L5 6.18L2.06 8.09L3.12 5.47L0.49 3.38H3.88Z" />
-          </svg>
-          Live market data · Real-time trading
-        </div>
-
         {/* Two-tone headline — primary text + accent highlight */}
         <h1 className="font-display text-4xl font-bold leading-[1.12] tracking-tight text-primary sm:text-5xl md:text-6xl">
           Trade smarter with{" "}

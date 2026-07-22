@@ -52,7 +52,7 @@ export default function DashboardShell({
             header clean while the sidebar is open) */}
         <div className="flex items-center gap-2">
           <p className="font-display text-xs font-semibold uppercase tracking-[0.25em] text-muted">
-            Dashboard
+            AutoTrendX
           </p>
         </div>
 

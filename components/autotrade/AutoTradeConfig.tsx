@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useDerivSocketStore } from "@/lib/derivsocket";
 import {
   CONTRACT_TYPES,
   DEFAULT_TRADE_MODE,
@@ -13,11 +14,12 @@ import { BarrierInput } from "@/components/BarrierInput";
 import { OffsetBarrierInput } from "@/components/OffsetBarrierInput";
 import type { BotConfig } from "@/components/autotrade/hooks/use-auto-trade";
 
-const SYMBOLS = [
-  { id: "R_10",  label: "V10" },
-  { id: "R_50",  label: "V50" },
-  { id: "R_75",  label: "V75" },
-  { id: "R_100", label: "V100" },
+// Fallback if the WS hasn't returned active_symbols yet
+const FALLBACK_SYMBOLS = [
+  { id: "R_10",  label: "Volatility 10" },
+  { id: "R_50",  label: "Volatility 50" },
+  { id: "R_75",  label: "Volatility 75" },
+  { id: "R_100", label: "Volatility 100" },
 ];
 
 const UNIT_LABELS: Record<string, string> = { t: "t", s: "s", m: "m", d: "d" };
@@ -30,6 +32,8 @@ interface AutoTradeConfigProps {
 
 export default function AutoTradeConfig({ initialConfig, onStart }: AutoTradeConfigProps) {
   const init = initialConfig;
+  const storeSymbols = useDerivSocketStore((s) => s.activeSymbols);
+  const symbols = storeSymbols.length > 0 ? storeSymbols : FALLBACK_SYMBOLS;
 
   const [tradeMode, setTradeMode]             = useState<TradeMode>(init?.tradeMode ?? DEFAULT_TRADE_MODE);
   const [contractSide, setContractSide]       = useState<0 | 1>(init?.contractSide ?? 0);
@@ -49,6 +53,13 @@ export default function AutoTradeConfig({ initialConfig, onStart }: AutoTradeCon
   const [formError, setFormError]             = useState<string | null>(null);
 
   const contractConfig = CONTRACT_TYPES[tradeMode];
+
+  // If the currently selected symbol isn't in the live list, reset to first available
+  useEffect(() => {
+    if (symbols.length > 0 && !symbols.find((s) => s.id === symbol)) {
+      setSymbol(symbols[0].id);
+    }
+  }, [symbols, symbol]);
 
   const availableUnits =
     contractConfig.duration.kind === "tick"
@@ -165,8 +176,11 @@ export default function AutoTradeConfig({ initialConfig, onStart }: AutoTradeCon
           {/* Symbol */}
           <div>
             <p className="mb-1.5 font-display text-xs font-medium text-muted">Symbol</p>
-            <div className="flex flex-wrap gap-1.5">
-              {SYMBOLS.map((s) => (
+            {storeSymbols.length === 0 && (
+              <p className="mb-1.5 font-sans text-[10px] text-muted">Loading live symbols…</p>
+            )}
+            <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+              {symbols.map((s) => (
                 <button
                   key={s.id}
                   type="button"

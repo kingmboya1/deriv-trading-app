@@ -14,8 +14,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Deriv Third-Party App",
-  description: "OAuth login scaffold for a Deriv-powered trading experience",
+  title: "AutoTrendX",
+  description: "Real-time trading powered by the Deriv API",
 };
 
 export default function RootLayout({

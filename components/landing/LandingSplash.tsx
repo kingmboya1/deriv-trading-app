@@ -64,7 +64,7 @@ export default function LandingSplash({ onDone }: LandingSplashProps) {
 
       {/* Wordmark */}
       <p className="landing-splash-title mt-5 font-display text-2xl font-bold text-primary">
-        Deriv Trading
+        AutoTrendX
       </p>
       <p className="landing-splash-sub mt-1 font-display text-sm font-medium tracking-widest text-accent">
         live markets · real time
