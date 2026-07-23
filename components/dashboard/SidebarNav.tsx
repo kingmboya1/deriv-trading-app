@@ -71,8 +71,8 @@ export default function SidebarNav({ active, onChange }: SidebarNavProps) {
       <aside className="hidden md:flex flex-col h-full w-56 flex-none bg-[#12161F] border-r border-[#1B2130]">
         {/* Logo row */}
         <div className="flex h-14 items-center gap-2.5 border-b border-[#1B2130] px-6">
-          <span className="font-space-grotesk font-bold text-[#D9A94D] tracking-tight text-lg">
-            KingMboya Deriv
+          <span className="font-display text-lg font-bold tracking-tight leading-none">
+            <span className="text-[#E6E9EF] font-medium">Auto</span><span className="text-[#D9A94D] font-extrabold">TrendX</span>
           </span>
         </div>
 
