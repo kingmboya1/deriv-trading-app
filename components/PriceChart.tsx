@@ -1,165 +1,184 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { connectDerivWS, disconnectDerivWS } from "@/lib/deriv-ws";
+/**
+ * PriceChart — lightweight-charts candlestick chart.
+ *
+ * Data source: useDerivSocketStore.candles[symbol] — populated by
+ * derivsocket.ts via ticks_history (initial batch) + ohlc (live updates).
+ *
+ * Symbol switching: sends forget_all + ticks_history resubscription on the
+ * shared store's send(), following the same pattern used for tick swaps.
+ *
+ * Does NOT open a separate WS connection.
+ */
 
-type ConnectionStatus = "connecting" | "connected" | "failed" | "closed";
+import { useEffect, useRef } from "react";
+import {
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type CandlestickSeriesOptions,
+  ColorType,
+  type UTCTimestamp,
+  CandlestickSeries,
+} from "lightweight-charts";
+import { useDerivSocketStore } from "@/lib/derivsocket";
 
 interface PriceChartProps {
-  /** Symbol to stream — controlled by the parent (MarketPanel pill row).
-   *  When this changes, PriceChart switches the WS tick subscription. */
   symbol?: string;
   onSpotChange?: (spot: number | null) => void;
 }
 
-const symbolLabels: Record<string, string> = {
+const SYMBOL_LABELS: Record<string, string> = {
   R_10:  "Volatility 10 Index",
   R_50:  "Volatility 50 Index",
   R_75:  "Volatility 75 Index",
   R_100: "Volatility 100 Index",
 };
 
-function getAccountIdentity(wsUrl?: string): string {
-  const accountIdCookie = document.cookie
-    .split("; ")
-    .find((cookie) => cookie.startsWith("deriv_account_id="))
-    ?.split("=")[1];
-  const accountPreferenceCookie = document.cookie
-    .split("; ")
-    .find((cookie) => cookie.startsWith("deriv_account_preference="))
-    ?.split("=")[1];
-  const normalizedAccountId = accountIdCookie ? decodeURIComponent(accountIdCookie) : "unknown";
-  const accountType =
-    accountPreferenceCookie === "demo" || (wsUrl && wsUrl.includes("/demo"))
-      ? "demo"
-      : accountPreferenceCookie === "real" || (wsUrl && !wsUrl.includes("/demo"))
-        ? "real"
-        : "unknown";
-
-  return `${accountType}:${normalizedAccountId}`;
-}
+// ── Theme colours matching the app's design tokens ──────────────────────────
+const CHART_THEME = {
+  bg:           "#12161F",
+  textColor:    "#8B93A7",
+  gridColor:    "#1B2130",
+  borderColor:  "#232838",
+  upColor:      "#2FBE85",
+  downColor:    "#F0526B",
+  wickUp:       "#2FBE85",
+  wickDown:     "#F0526B",
+} as const;
 
 export function PriceChart({ symbol = "R_10", onSpotChange }: PriceChartProps) {
-  const [prices, setPrices] = useState<number[]>([]);
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
-  const socketRef = useRef<ReturnType<typeof connectDerivWS>>(null);
-  const activeAccountIdentityRef = useRef<string | null>(null);
-  // Track the last symbol we subscribed to so we only re-subscribe on change
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef     = useRef<IChartApi | null>(null);
+  const seriesRef    = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const subscribedSymbolRef = useRef<string | null>(null);
 
+  const candles    = useDerivSocketStore((s) => s.candles);
+  const wsStatus   = useDerivSocketStore((s) => s.status);
+  const send       = useDerivSocketStore((s) => s.send);
+
+  // ── Mount: create chart ──────────────────────────────────────────────────
   useEffect(() => {
-    const loadSocket = async () => {
-      try {
-        const response = await fetch("/api/ws-token");
-        const data = (await response.json()) as { otp?: string; wsUrl?: string };
+    const el = containerRef.current;
+    if (!el) return;
 
-        if (!response.ok || !data.otp || !data.wsUrl) {
-          setConnectionStatus("failed");
-          return;
-        }
-
-        const nextWsUrl = data.wsUrl;
-        const nextAccountIdentity = getAccountIdentity(nextWsUrl);
-        const currentSocket = socketRef.current?.socket;
-        const socketIsOpen = currentSocket && currentSocket.readyState === WebSocket.OPEN;
-        const socketIsConnecting = currentSocket && currentSocket.readyState === WebSocket.CONNECTING;
-
-        if (socketIsOpen && activeAccountIdentityRef.current === nextAccountIdentity) {
-          return;
-        }
-
-        if (socketIsConnecting) {
-          return;
-        }
-
-        if (socketIsOpen) {
-          disconnectDerivWS(currentSocket);
-        }
-
-        socketRef.current = connectDerivWS(
-          data.otp,
-          (price) => {
-            setCurrentPrice(price);
-            setPrices((previous) => [...previous.slice(-49), price]);
-          },
-          {
-            wsUrl: nextWsUrl,
-            onStatusChange: setConnectionStatus,
-          }
-        );
-        activeAccountIdentityRef.current = nextAccountIdentity;
-      } catch {
-        setConnectionStatus("failed");
-      }
-    };
-
-    void loadSocket();
-
-    const handleReconnectCheck = () => {
-      void loadSocket();
-    };
-
-    window.addEventListener("focus", handleReconnectCheck);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        void loadSocket();
-      }
+    const chart = createChart(el, {
+      layout: {
+        background: { type: ColorType.Solid, color: CHART_THEME.bg },
+        textColor: CHART_THEME.textColor,
+        fontFamily: "'JetBrains Mono', 'SFMono-Regular', monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: CHART_THEME.gridColor },
+        horzLines: { color: CHART_THEME.gridColor },
+      },
+      crosshair: {
+        vertLine: { color: CHART_THEME.borderColor, labelBackgroundColor: CHART_THEME.bg },
+        horzLine: { color: CHART_THEME.borderColor, labelBackgroundColor: CHART_THEME.bg },
+      },
+      timeScale: {
+        borderColor: CHART_THEME.borderColor,
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      rightPriceScale: {
+        borderColor: CHART_THEME.borderColor,
+      },
+      autoSize: true,
     });
 
-    const intervalId = window.setInterval(() => {
-      void loadSocket();
-    }, 15000);
+    const candleOptions: Partial<CandlestickSeriesOptions> = {
+      upColor:          CHART_THEME.upColor,
+      downColor:        CHART_THEME.downColor,
+      borderUpColor:    CHART_THEME.upColor,
+      borderDownColor:  CHART_THEME.downColor,
+      wickUpColor:      CHART_THEME.wickUp,
+      wickDownColor:    CHART_THEME.wickDown,
+    };
+
+    const series = chart.addSeries(CandlestickSeries, candleOptions);
+
+    chartRef.current  = chart;
+    seriesRef.current = series;
 
     return () => {
-      window.removeEventListener("focus", handleReconnectCheck);
-      document.removeEventListener("visibilitychange", handleReconnectCheck);
-      window.clearInterval(intervalId);
-      disconnectDerivWS(socketRef.current?.socket);
-      socketRef.current = null;
-      activeAccountIdentityRef.current = null;
+      chart.remove();
+      chartRef.current  = null;
+      seriesRef.current = null;
     };
   }, []);
 
+  // ── Symbol change: resubscribe candle stream ─────────────────────────────
   useEffect(() => {
-    onSpotChange?.(currentPrice);
-  }, [currentPrice, onSpotChange]);
-
-  // When the parent changes the symbol prop, switch the WS subscription.
-  // This is the single place symbol changes are acted upon — no dropdown.
-  useEffect(() => {
-    if (subscribedSymbolRef.current === symbol) return; // already on this symbol
-
-    const socket = socketRef.current?.socket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      // Socket not ready yet — mark the desired symbol so the open handler
-      // picks it up, or the next loadSocket call will use it.
-      subscribedSymbolRef.current = symbol;
-      socketRef.current?.setCurrentSymbol(symbol);
-      setPrices([]);
-      setCurrentPrice(null);
-      return;
-    }
-
-    socketRef.current?.setCurrentSymbol(symbol);
-    socket.send(JSON.stringify({ forget_all: "ticks" }));
-    socket.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    if (subscribedSymbolRef.current === symbol) return;
     subscribedSymbolRef.current = symbol;
-    setPrices([]);
-    setCurrentPrice(null);
-  }, [symbol]);
 
-  const chartData = prices.map((price, index) => ({
-    index: index + 1,
-    price,
-  }));
+    // Clear chart data immediately on symbol switch
+    seriesRef.current?.setData([]);
+    onSpotChange?.(null);
+
+    if (wsStatus !== "Connected") return;
+
+    try {
+      // Unsubscribe old candle stream, then subscribe for the new symbol
+      send({ forget_all: "candles" });
+      send({
+        ticks_history: symbol,
+        style: "candles",
+        granularity: 60,
+        count: 100,
+        subscribe: 1,
+      });
+    } catch {
+      // WS not open yet — the onopen handler will subscribe R_10 by default;
+      // the store will update candles[symbol] when data arrives.
+    }
+  }, [symbol, wsStatus, send, onSpotChange]);
+
+  // ── Candle data → chart ──────────────────────────────────────────────────
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    const bars = candles[symbol];
+    if (!bars || bars.length === 0) return;
+
+    // lightweight-charts requires bars sorted ascending by time
+    const sorted = [...bars]
+      .sort((a, b) => a.time - b.time)
+      .map((c) => ({ ...c, time: c.time as UTCTimestamp }));
+    series.setData(sorted);
+
+    // Report latest close to parent (MarketPanel spot map)
+    const last = sorted[sorted.length - 1];
+    if (last) onSpotChange?.(last.close);
+
+    // Scroll to the most recent candle
+    chartRef.current?.timeScale().scrollToRealTime();
+  }, [candles, symbol, onSpotChange]);
+
+  // ── WS connects for the first time: subscribe current symbol ─────────────
+  useEffect(() => {
+    if (wsStatus !== "Connected") return;
+    if (subscribedSymbolRef.current === symbol) return; // already subscribed
+
+    try {
+      send({
+        ticks_history: symbol,
+        style: "candles",
+        granularity: 60,
+        count: 100,
+        subscribe: 1,
+      });
+      subscribedSymbolRef.current = symbol;
+    } catch { /* ignore */ }
+  }, [wsStatus, symbol, send]);
+
+  const connectionStatus = wsStatus;
+  const bars = candles[symbol];
+  const isEmpty = !bars || bars.length === 0;
 
   return (
     <section className="rounded-2xl border border-hairline bg-surface p-5">
@@ -167,69 +186,37 @@ export function PriceChart({ symbol = "R_10", onSpotChange }: PriceChartProps) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="font-display text-xs font-semibold uppercase tracking-[0.3em] text-muted">
-            Live Market
+            Live Market · 1m
           </p>
           <h2 className="mt-1 font-display text-base font-semibold text-primary">
-            {symbolLabels[symbol] ?? symbol}
+            {SYMBOL_LABELS[symbol] ?? symbol}
           </h2>
         </div>
 
-        {/* Status badge only — dropdown removed, pills are the selector */}
         <div className={`rounded-full border px-2.5 py-0.5 font-mono text-xs font-medium ${
-          connectionStatus === "connected"
+          connectionStatus === "Connected"
             ? "border-gain/30 bg-gain/10 text-gain"
-            : connectionStatus === "failed"
+            : connectionStatus === "Disconnected"
             ? "border-loss/30 bg-loss/10 text-loss"
             : "border-hairline bg-card text-muted"
         }`}>
-          {connectionStatus === "connected"
+          {connectionStatus === "Connected"
             ? "Live"
-            : connectionStatus === "failed"
-            ? "Failed"
-            : connectionStatus === "closed"
-            ? "Closed"
+            : connectionStatus === "Disconnected"
+            ? "Disconnected"
             : "Connecting"}
         </div>
       </div>
 
-      {/* Current price */}
-      <div className="mt-4 rounded-xl border border-hairline bg-card px-4 py-3">
-        <p className="font-display text-xs font-medium text-muted">Current price</p>
-        <p className="mt-1 font-mono text-2xl font-medium tabular-nums text-primary">
-          {currentPrice !== null ? currentPrice.toFixed(2) : "—"}
-        </p>
-        {connectionStatus === "failed" && (
-          <p className="mt-1 font-sans text-xs text-loss">
-            Live feed failed. Refresh to retry.
-          </p>
-        )}
-      </div>
-
-      {/* Chart */}
-      <div className="mt-4 h-56 rounded-xl border border-hairline bg-card p-3">
-        {currentPrice === null ? (
-          <div className="flex h-full items-center justify-center font-mono text-xs text-muted">
-            {connectionStatus === "failed" ? "No data" : "Connecting…"}
+      {/* Chart container */}
+      <div className="relative mt-4 h-64 overflow-hidden rounded-xl">
+        {/* Overlay shown while no data yet */}
+        {isEmpty && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card font-mono text-xs text-muted">
+            {connectionStatus === "Disconnected" ? "No data — reconnecting…" : "Loading candles…"}
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <XAxis dataKey="index" hide />
-              <YAxis
-                domain={["dataMin - 1", "dataMax + 1"]}
-                axisLine={false}
-                tick={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke="var(--color-accent)"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
         )}
+        <div ref={containerRef} className="h-full w-full" />
       </div>
     </section>
   );

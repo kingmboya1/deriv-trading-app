@@ -56,12 +56,22 @@ interface SocketAuthState {
   currency: string | null;
 }
 
+export interface CandleBar {
+  time: number;   // Unix timestamp (seconds)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 interface DerivSocketStore {
   status: ConnectionStatus;
   /** Type of the currently connected account — derived from the live WS URL. */
   activeAccountType: "real" | "demo" | "unknown";
   balance: number | null;
   portfolio: Record<number, OpenContract>;
+  /** Candle history keyed by symbol — populated by ticks_history + ohlc messages */
+  candles: Record<string, CandleBar[]>;
   activeSymbols: { id: string; label: string }[];
   auth: SocketAuthState;
   connect: () => Promise<void>;
@@ -237,6 +247,7 @@ const resetAccountScopedState = (set: DerivSocketSet) => {
     activeAccountType: "unknown",
     balance: null,
     portfolio: {},
+    candles: {},
     activeSymbols: [],
     auth: {
       accessToken: null,
@@ -255,6 +266,7 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   activeAccountType: "unknown",
   balance: null,
   portfolio: {},
+  candles: {},
   activeSymbols: [],
   auth: {
     accessToken: null,
@@ -515,6 +527,11 @@ const connectSocket = (
   set({ activeAccountType: accountTypeFromUrl });
 
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    // Null handlers before closing so the close event doesn't spawn another reconnect
+    socket.onopen    = null;
+    socket.onclose   = null;
+    socket.onerror   = null;
+    socket.onmessage = null;
     socket.close();
   }
 
@@ -522,34 +539,45 @@ const connectSocket = (
   const newSocket = new WebSocket(wsUrl);
   socket = newSocket;
 
-  newSocket.addEventListener("open", () => {
+  // Property assignment guarantees one handler per event slot — no stacking
+  // across reconnect cycles (eliminates MaxListenersExceededWarning).
+
+  newSocket.onopen = () => {
+    if (socket !== newSocket) return; // superseded socket — ignore
     console.log("[deriv-socket] connection opened");
     reconnectAttempts = 0;
     set({ status: "Connected" });
 
-    // Send three fire-and-forget subscription requests
     try {
       newSocket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
       newSocket.send(JSON.stringify({ portfolio: 1 }));
       newSocket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
-      // Fetch tradeable symbols dynamically
       newSocket.send(JSON.stringify({ active_symbols: "brief", product_type: "basic" }));
+      // Subscribe to 1-minute candles for the default symbol on connect.
+      // PriceChart re-subscribes for the user's selected symbol after mount.
+      newSocket.send(JSON.stringify({
+        ticks_history: "R_10",
+        style: "candles",
+        granularity: 60,
+        count: 100,
+        subscribe: 1,
+      }));
     } catch (error) {
       console.error("[deriv-socket] Failed to send subscriptions:", error);
     }
-  });
+  };
 
-  newSocket.addEventListener("close", (event: CloseEvent) => {
+  newSocket.onclose = (event: CloseEvent) => {
     console.log("[deriv-socket] connection closed", { code: event.code, reason: event.reason });
-    socket = null;
+    if (socket === newSocket) socket = null;
 
-    // If this close was triggered intentionally by reconnect() (account switch),
-    // don't reset activeAccountType — connectSocket() already set the new value
-    // from the fresh WS URL before opening the new socket.
     if (intentionalClose) {
       intentionalClose = false;
       return;
     }
+
+    // If a new socket is already connecting, skip scheduling another reconnect
+    if (socket && socket.readyState === WebSocket.CONNECTING) return;
 
     if (reconnectAttempts >= 5) {
       set({ status: "Disconnected", activeAccountType: "unknown" });
@@ -563,23 +591,21 @@ const connectSocket = (
     reconnectTimer = window.setTimeout(() => {
       void reconnectAfterDelay(set, get);
     }, 2000);
-  });
+  };
 
-  newSocket.addEventListener("error", (event) => {
+  newSocket.onerror = (event) => {
     console.error("[deriv-socket] websocket error:", event);
-    if (socket === newSocket) {
-      set({ status: "Reconnecting..." });
-    }
-  });
+    if (socket === newSocket) set({ status: "Reconnecting..." });
+  };
 
-  newSocket.addEventListener("message", (event) => {
+  newSocket.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data as string) as Record<string, unknown>;
       handleMessage(payload, set, get);
     } catch (error) {
       console.error("[deriv-socket] failed to parse message:", error);
     }
-  });
+  };
 };
 
 const reconnectAfterDelay = async (set: DerivSocketSet, get: () => DerivSocketStore) => {
@@ -829,6 +855,56 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
       }
     }
 
+    return;
+  }
+
+  // ── Handle candles (initial batch from ticks_history) ────────────────────
+  if (payload.msg_type === "candles" && Array.isArray(payload.candles)) {
+    const symbol =
+      typeof (payload as Record<string, unknown>).echo_req === "object" &&
+      (payload as Record<string, unknown>).echo_req !== null
+        ? ((payload as Record<string, unknown>).echo_req as Record<string, unknown>).ticks_history
+        : null;
+    if (typeof symbol === "string" && symbol) {
+      const bars = (payload.candles as Record<string, unknown>[]).map((c) => ({
+        time:  Number(c.epoch),
+        open:  Number(c.open),
+        high:  Number(c.high),
+        low:   Number(c.low),
+        close: Number(c.close),
+      }));
+      set((state) => ({
+        candles: { ...state.candles, [symbol]: bars },
+      }));
+    }
+    return;
+  }
+
+  // ── Handle ohlc (live 1-minute candle update) ─────────────────────────────
+  if (payload.msg_type === "ohlc" && payload.ohlc && typeof payload.ohlc === "object") {
+    const ohlc = payload.ohlc as Record<string, unknown>;
+    const symbol = typeof ohlc.symbol === "string" ? ohlc.symbol : null;
+    if (!symbol) return;
+
+    const bar = {
+      time:  Number(ohlc.open_time),
+      open:  Number(ohlc.open),
+      high:  Number(ohlc.high),
+      low:   Number(ohlc.low),
+      close: Number(ohlc.close),
+    };
+
+    set((state) => {
+      const existing = state.candles[symbol] ?? [];
+      // If this bar's time matches the last candle, update it (same minute)
+      // Otherwise append a new candle.
+      const last = existing[existing.length - 1];
+      const updated =
+        last && last.time === bar.time
+          ? [...existing.slice(0, -1), bar]
+          : [...existing, bar];
+      return { candles: { ...state.candles, [symbol]: updated } };
+    });
     return;
   }
 };
