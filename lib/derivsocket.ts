@@ -566,30 +566,21 @@ const connectSocket = (
     reconnectAttempts = 0;
     set({ status: "Connected" });
 
-    // Step 1: Authorize first — private subscriptions (balance, portfolio,
-    // transaction) must only be sent AFTER a successful authorize response.
-    // We read the token from the cookie; it was set by the OAuth callback.
-    const token = getCookieValue("deriv_auth_token");
-    
-    console.log("[deriv-socket] 🍪 Token retrieved from cookie:", {
-      hasToken: !!token,
-      tokenPrefix: token ? token.substring(0, 20) + "..." : "null",
-      tokenLength: token?.length ?? 0,
-    });
+    // The WebSocket URL already contains an OTP parameter which automatically
+    // authorizes the connection. We don't need to send a separate authorize
+    // message. The OTP in the URL (from /api/ws-token) handles authentication.
+    //
+    // After connection, we can immediately send private subscriptions since
+    // the OTP-based connection is already authorized.
 
     try {
-      if (token) {
-        console.log("[deriv-socket] 📤 Sending authorize request to Deriv...");
-        // Send authorize — private subscriptions are dispatched in handleMessage
-        // under msg_type === "authorize" once the server confirms auth.
-        newSocket.send(JSON.stringify({ authorize: token }));
-        console.log("[deriv-socket] ✅ Authorize request sent");
-      } else {
-        console.warn("[deriv-socket] ⚠️ No auth token found in cookies - cannot authorize!");
-      }
+      // Private subscriptions — safe to send immediately since OTP authorizes on connect
+      newSocket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+      newSocket.send(JSON.stringify({ portfolio: 1 }));
+      newSocket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
+      console.log("[deriv-socket] ✅ Sent private subscriptions (balance, portfolio, transaction)");
 
-      // Public market data — safe to send immediately without auth.
-      // Fetch tradeable symbols dynamically
+      // Public market data
       newSocket.send(JSON.stringify({ active_symbols: "brief", product_type: "basic" }));
 
       // NOTE: We do NOT subscribe to candles here anymore. PriceChart will
