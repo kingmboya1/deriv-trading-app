@@ -129,6 +129,7 @@ export function PriceChart({ symbol = "R_10", onSpotChange }: PriceChartProps) {
         style: "candles",
         granularity: 60,
         count: 100,
+        end: "latest",
         subscribe: 1,
       });
     } catch {
@@ -170,6 +171,7 @@ export function PriceChart({ symbol = "R_10", onSpotChange }: PriceChartProps) {
         style: "candles",
         granularity: 60,
         count: 100,
+        end: "latest",
         subscribe: 1,
       });
       subscribedSymbolRef.current = symbol;

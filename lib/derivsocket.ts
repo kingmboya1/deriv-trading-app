@@ -548,22 +548,30 @@ const connectSocket = (
     reconnectAttempts = 0;
     set({ status: "Connected" });
 
+    // Step 1: Authorize first — private subscriptions (balance, portfolio,
+    // transaction) must only be sent AFTER a successful authorize response.
+    // We read the token from the cookie; it was set by the OAuth callback.
+    const token = getCookieValue("deriv_auth_token");
+
     try {
-      newSocket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-      newSocket.send(JSON.stringify({ portfolio: 1 }));
-      newSocket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
-      newSocket.send(JSON.stringify({ active_symbols: "brief", product_type: "basic" }));
-      // Subscribe to 1-minute candles for the default symbol on connect.
-      // PriceChart re-subscribes for the user's selected symbol after mount.
+      if (token) {
+        // Send authorize — private subscriptions are dispatched in handleMessage
+        // under msg_type === "authorize" once the server confirms auth.
+        newSocket.send(JSON.stringify({ authorize: token }));
+      }
+
+      // Public market data — safe to send immediately without auth.
+      // Subscribe to default symbol candles so the chart has data on first load.
       newSocket.send(JSON.stringify({
         ticks_history: "R_10",
         style: "candles",
         granularity: 60,
         count: 100,
+        end: "latest",
         subscribe: 1,
       }));
     } catch (error) {
-      console.error("[deriv-socket] Failed to send subscriptions:", error);
+      console.error("[deriv-socket] Failed to send on open:", error);
     }
   };
 
@@ -655,6 +663,22 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
   };
 
   updateAuthFromPayload(payload);
+
+  // ── Handle authorize response — fire private subscriptions post-auth ──────
+  if (payload.msg_type === "authorize" && !payload.error) {
+    // Auth confirmed — now safe to send private account subscriptions
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      try {
+        socket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+        socket.send(JSON.stringify({ portfolio: 1 }));
+        socket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
+      } catch (err) {
+        console.error("[deriv-socket] Failed to send post-auth subscriptions:", err);
+      }
+    }
+    // Auth data itself is handled by updateAuthFromPayload above — fall through
+    // to let pending requests resolve if this was a request-based authorize.
+  }
 
   // Handle pending request resolution/rejection by req_id
   if (typeof payload.req_id === "number" && pendingRequests.has(payload.req_id)) {
@@ -860,19 +884,24 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
 
   // ── Handle candles (initial batch from ticks_history) ────────────────────
   if (payload.msg_type === "candles" && Array.isArray(payload.candles)) {
+    // Extract the requested symbol from echo_req
+    const echoReq = (payload as Record<string, unknown>).echo_req;
     const symbol =
-      typeof (payload as Record<string, unknown>).echo_req === "object" &&
-      (payload as Record<string, unknown>).echo_req !== null
-        ? ((payload as Record<string, unknown>).echo_req as Record<string, unknown>).ticks_history
+      echoReq && typeof echoReq === "object"
+        ? (echoReq as Record<string, unknown>).ticks_history
         : null;
+
     if (typeof symbol === "string" && symbol) {
-      const bars = (payload.candles as Record<string, unknown>[]).map((c) => ({
-        time:  Number(c.epoch),
-        open:  Number(c.open),
-        high:  Number(c.high),
-        low:   Number(c.low),
-        close: Number(c.close),
-      }));
+      const bars = (payload.candles as Record<string, unknown>[])
+        .map((c) => ({
+          time:  Number(c.epoch),
+          open:  Number(c.open),
+          high:  Number(c.high),
+          low:   Number(c.low),
+          close: Number(c.close),
+        }))
+        .filter((c) => Number.isFinite(c.time) && c.time > 0);
+
       set((state) => ({
         candles: { ...state.candles, [symbol]: bars },
       }));
@@ -894,11 +923,12 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
       close: Number(ohlc.close),
     };
 
+    if (!Number.isFinite(bar.time) || bar.time <= 0) return;
+
     set((state) => {
       const existing = state.candles[symbol] ?? [];
-      // If this bar's time matches the last candle, update it (same minute)
-      // Otherwise append a new candle.
       const last = existing[existing.length - 1];
+      // Same minute → update the last bar in-place; new minute → append
       const updated =
         last && last.time === bar.time
           ? [...existing.slice(0, -1), bar]
