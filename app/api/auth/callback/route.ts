@@ -47,8 +47,9 @@ export async function GET(request: NextRequest) {
   if (tokenPayload.access_token) {
     response.cookies.set("deriv_auth_token", tokenPayload.access_token, {
       path: "/",
-      httpOnly: true,
+      httpOnly: false,  // Must be false so client-side WebSocket can read it
       sameSite: "lax",
+      secure: true,  // Only send over HTTPS (production safety)
       maxAge: 60 * 60 * 24,
     });
 
