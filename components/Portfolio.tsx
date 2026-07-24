@@ -70,7 +70,8 @@ export default function Portfolio() {
 
   useEffect(() => {
     void connect();
-  }, [connect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   useEffect(() => {
     if (!confirmSellModal) {

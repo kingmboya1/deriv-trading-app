@@ -277,11 +277,19 @@ export const useDerivSocketStore = create<DerivSocketStore>((set, get) => ({
   connect: async () => {
     // Guard: if already connecting or connected, return (singleton pattern)
     const currentStatus = get().status;
+    
+    console.log("[deriv-socket] 🔌 connect() called", {
+      currentStatus,
+      socketState: socket?.readyState,
+      socketExists: !!socket,
+    });
+    
     if (
       currentStatus === "Connecting" ||
       currentStatus === "Connected" ||
       (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))
     ) {
+      console.log("[deriv-socket] ✋ Already connecting/connected, skipping");
       return;
     }
 
@@ -513,10 +521,19 @@ const connectSocket = (
   set: DerivSocketSet,
   get: () => DerivSocketStore
 ) => {
+  console.log("[deriv-socket] 🔌 connectSocket called", {
+    existingSocketState: socket?.readyState,
+    wsUrl: wsUrl.substring(0, 50) + "...",
+  });
+  
   clearReconnectTimer();
 
   const nextAccountIdentity = getAccountIdentityFromWsUrl(wsUrl);
   if (activeAccountIdentity !== null && activeAccountIdentity !== nextAccountIdentity) {
+    console.log("[deriv-socket] 🔄 Account identity changed, resetting state", {
+      from: activeAccountIdentity,
+      to: nextAccountIdentity,
+    });
     resetAccountScopedState(set);
   }
   activeAccountIdentity = nextAccountIdentity;
@@ -527,6 +544,7 @@ const connectSocket = (
   set({ activeAccountType: accountTypeFromUrl });
 
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    console.log("[deriv-socket] ⚠️ Closing existing socket before creating new one");
     // Null handlers before closing so the close event doesn't spawn another reconnect
     socket.onopen    = null;
     socket.onclose   = null;
@@ -535,7 +553,7 @@ const connectSocket = (
     socket.close();
   }
 
-  console.log("[deriv-socket] opening websocket");
+  console.log("[deriv-socket] 📱 Creating new WebSocket instance");
   const newSocket = new WebSocket(wsUrl);
   socket = newSocket;
 
@@ -561,15 +579,13 @@ const connectSocket = (
       }
 
       // Public market data — safe to send immediately without auth.
-      // Subscribe to default symbol candles so the chart has data on first load.
-      newSocket.send(JSON.stringify({
-        ticks_history: "R_10",
-        style: "candles",
-        granularity: 60,
-        count: 100,
-        end: "latest",
-        subscribe: 1,
-      }));
+      // Fetch tradeable symbols dynamically
+      newSocket.send(JSON.stringify({ active_symbols: "brief", product_type: "basic" }));
+
+      // NOTE: We do NOT subscribe to candles here anymore. PriceChart will
+      // subscribe for its selected symbol when it mounts via the send() method.
+      // This prevents hardcoding R_10 and ensures each component subscribes
+      // for the symbols it needs.
     } catch (error) {
       console.error("[deriv-socket] Failed to send on open:", error);
     }
@@ -650,6 +666,15 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
     const accountId = typeof authorizeData.loginid === "string" ? authorizeData.loginid : null;
     const accessToken = typeof authorizeData.token === "string" ? authorizeData.token : null;
 
+    console.log("[deriv-socket] 🔍 updateAuthFromPayload called:", {
+      hasCurrency: !!currency,
+      hasAccountId: !!accountId,
+      hasAccessToken: !!accessToken,
+      currency,
+      accountId,
+      currentAuthState: get().auth,
+    });
+
     if (currency || accountId || accessToken) {
       set((state: DerivSocketStore) => ({
         auth: {
@@ -659,6 +684,8 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
           currency: currency ?? state.auth?.currency ?? null,
         },
       }));
+      
+      console.log("[deriv-socket] ✅ Auth state updated. New auth state:", get().auth);
     }
   };
 
@@ -666,15 +693,20 @@ const handleMessage = (payload: Record<string, unknown>, set: DerivSocketSet, ge
 
   // ── Handle authorize response — fire private subscriptions post-auth ──────
   if (payload.msg_type === "authorize" && !payload.error) {
+    console.log("[deriv-socket] 📡 Authorize response received, sending private subscriptions");
+    
     // Auth confirmed — now safe to send private account subscriptions
     if (socket && socket.readyState === WebSocket.OPEN) {
       try {
         socket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         socket.send(JSON.stringify({ portfolio: 1 }));
         socket.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
+        console.log("[deriv-socket] ✅ Private subscriptions sent (balance, portfolio, transaction)");
       } catch (err) {
-        console.error("[deriv-socket] Failed to send post-auth subscriptions:", err);
+        console.error("[deriv-socket] ❌ Failed to send post-auth subscriptions:", err);
       }
+    } else {
+      console.warn("[deriv-socket] ⚠️ Socket not open, cannot send private subscriptions");
     }
     // Auth data itself is handled by updateAuthFromPayload above — fall through
     // to let pending requests resolve if this was a request-based authorize.

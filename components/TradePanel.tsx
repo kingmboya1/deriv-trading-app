@@ -92,7 +92,8 @@ export function TradePanel({ symbol = "R_10", currentSpot }: TradePanelProps) {
 
   useEffect(() => {
     void connect();
-  }, [connect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   useEffect(() => {
     if (currentContract.duration.kind === "tick") {

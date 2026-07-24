@@ -36,7 +36,10 @@ export default function BalanceBar({ realBalance, demoBalance }: BalanceBarProps
   const accountId      = useDerivSocketStore((s) => s.auth.accountId);
   const currency       = useDerivSocketStore((s) => s.auth.currency);
 
-  useEffect(() => { void connect(); }, [connect]);
+  useEffect(() => { 
+    void connect(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   const isConnecting = wsStatus === "Connecting" || wsStatus === "Reconnecting...";
 

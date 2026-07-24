@@ -199,7 +199,19 @@ async function placeTrade(
   const wsState  = useDerivSocketStore.getState();
   const currency = wsState.auth.currency?.toUpperCase();
 
+  console.log("[auto-trade] 💰 placeTrade called:", {
+    stake,
+    currency,
+    hasCurrency: !!currency,
+    authState: wsState.auth,
+    wsStatus: wsState.status,
+  });
+
   if (!currency) {
+    console.error("[auto-trade] ❌ Currency not available - stopping bot", {
+      authState: wsState.auth,
+      wsStatus: wsState.status,
+    });
     set({ isRunning: false, error: "Currency not available — is the WebSocket connected?" });
     teardownEngineListeners();
     isPlacing = false;
