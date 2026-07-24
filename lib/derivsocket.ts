@@ -570,12 +570,22 @@ const connectSocket = (
     // transaction) must only be sent AFTER a successful authorize response.
     // We read the token from the cookie; it was set by the OAuth callback.
     const token = getCookieValue("deriv_auth_token");
+    
+    console.log("[deriv-socket] 🍪 Token retrieved from cookie:", {
+      hasToken: !!token,
+      tokenPrefix: token ? token.substring(0, 20) + "..." : "null",
+      tokenLength: token?.length ?? 0,
+    });
 
     try {
       if (token) {
+        console.log("[deriv-socket] 📤 Sending authorize request to Deriv...");
         // Send authorize — private subscriptions are dispatched in handleMessage
         // under msg_type === "authorize" once the server confirms auth.
         newSocket.send(JSON.stringify({ authorize: token }));
+        console.log("[deriv-socket] ✅ Authorize request sent");
+      } else {
+        console.warn("[deriv-socket] ⚠️ No auth token found in cookies - cannot authorize!");
       }
 
       // Public market data — safe to send immediately without auth.
@@ -625,6 +635,47 @@ const connectSocket = (
   newSocket.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data as string) as Record<string, unknown>;
+      
+      // Log ALL messages with errors
+      if (payload.error) {
+        console.error("╔═══════════════════════════════════════════════════════════════");
+        console.error("║ ❌ ERROR RESPONSE FROM DERIV");
+        console.error("╠═══════════════════════════════════════════════════════════════");
+        console.error("║ msg_type:", payload.msg_type);
+        console.error("║ Error:", JSON.stringify(payload.error, null, 2));
+        console.error("║ Full payload:", JSON.stringify(payload, null, 2));
+        console.error("╚═══════════════════════════════════════════════════════════════");
+      }
+      
+      // ═══ RAW PAYLOAD LOGGING FOR AUTHORIZE RESPONSES ═══
+      if (payload.msg_type === "authorize" || payload.authorize) {
+        console.log("╔═══════════════════════════════════════════════════════════════");
+        console.log("║ 🔐 RAW AUTHORIZE RESPONSE FROM DERIV");
+        console.log("╠═══════════════════════════════════════════════════════════════");
+        console.log("║ Full raw payload:", JSON.stringify(payload, null, 2));
+        console.log("╠═══════════════════════════════════════════════════════════════");
+        console.log("║ msg_type:", payload.msg_type);
+        console.log("║ Has authorize field:", !!payload.authorize);
+        console.log("║ Has error field:", !!payload.error);
+        
+        if (payload.error) {
+          console.log("║ ❌ ERROR IN AUTHORIZE RESPONSE:");
+          console.log("║ Error object:", JSON.stringify(payload.error, null, 2));
+        }
+        
+        if (payload.authorize && typeof payload.authorize === "object") {
+          const auth = payload.authorize as Record<string, unknown>;
+          console.log("║ ✅ Authorize data present:");
+          console.log("║   - currency:", auth.currency);
+          console.log("║   - loginid:", auth.loginid);
+          console.log("║   - balance:", auth.balance);
+          console.log("║   - email:", auth.email);
+          console.log("║   - fullname:", auth.fullname);
+          console.log("║   - account_list:", Array.isArray(auth.account_list) ? `Array(${auth.account_list.length})` : auth.account_list);
+        }
+        console.log("╚═══════════════════════════════════════════════════════════════");
+      }
+      
       handleMessage(payload, set, get);
     } catch (error) {
       console.error("[deriv-socket] failed to parse message:", error);
