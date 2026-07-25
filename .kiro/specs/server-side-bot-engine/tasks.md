@@ -167,8 +167,8 @@ This plan implements a server-side bot engine that moves automated trading logic
 - [x] 7. Checkpoint - Verify trade execution
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Implement session manager
-  - [~] 8.1 Create SessionManager class
+- [x] 8. Implement session manager
+  - [x] 8.1 Create SessionManager class
     - Create `lib/server/bot-engine/session-manager.ts`
     - Use Map for sessionId → BotEngine storage
     - Use Map for userId → sessionId reverse index
@@ -176,14 +176,14 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Generate unique UUIDs for session IDs
     - _Requirements: 1.1, 1.2, 16.1_
   
-  - [~] 8.2 Enforce one-bot-per-user rule
+  - [x] 8.2 Enforce one-bot-per-user rule
     - Implement `hasActiveSession(userId)` method
     - Implement `getUserSession(userId)` method
     - Reject createSession if user already has active session
     - Return error "User already has an active bot session"
     - _Requirements: 1.3, 16.2, 16.3, 16.5_
   
-  - [~] 8.3 Implement session cleanup
+  - [x] 8.3 Implement session cleanup
     - Remove session from both Maps on deleteSession
     - Remove userId → sessionId mapping on session end
     - _Requirements: 15.4, 16.4_
@@ -201,8 +201,8 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Test session cleanup removes all mappings
     - _Requirements: 1.1, 1.2, 15.4, 16.1, 16.4_
 
-- [ ] 9. Create bot server Express application
-  - [~] 9.1 Set up Express server structure
+`- [ ] 9. Create bot server Express application
+  - [x] 9.1 Set up Express server structure
     - Create `bot-server/` directory in project root
     - Create `bot-server/index.ts` (main entry point)
     - Create `bot-server/package.json` with dependencies (express, ws, uuid)
@@ -210,7 +210,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Add CORS middleware for Next.js origin
     - _Requirements: 10.3, 10.4_
   
-  - [~] 9.2 Implement session start endpoint
+  - [x] 9.2 Implement session start endpoint
     - Create `bot-server/routes/sessions.ts`
     - Add POST /sessions/start route
     - Extract userId and derivToken from request body
@@ -219,7 +219,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Call startSession, return sessionId on success
     - _Requirements: 10.1, 10.2, 10.3, 10.6_
   
-  - [~] 9.3 Implement session stop endpoint
+  - [x] 9.3 Implement session stop endpoint
     - Add POST /sessions/stop route
     - Extract sessionId and optional reason from body
     - Call BotEngine.stopSession
@@ -227,7 +227,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Handle already-stopped sessions gracefully
     - _Requirements: 10.4, 10.5, 15.5, 15.6_
   
-  - [~] 9.4 Implement status endpoint
+  - [x] 9.4 Implement status endpoint
     - Add GET /sessions/status route
     - Extract sessionId from query params
     - Retrieve session from SessionManager
@@ -235,23 +235,23 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return BotStatus with sessionId, trades, P/L, uptime
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
   
-  - [~] 9.5 Add error handling middleware
+  - [x] 9.5 Add error handling middleware
     - Handle malformed JSON requests
     - Handle WebSocket connection failures (return 500)
     - Log errors without crashing server
     - _Requirements: 12.1, 14.1, 14.2, 14.5_
   
-  - [~] 9.6 Add environment configuration
+  - [x] 9.6 Add environment configuration
     - Create `bot-server/.env.example`
     - Add PORT, CORS_ORIGIN, MAX_SESSIONS config
     - Load default strategy from JSON file on startup
     - _Requirements: 22.3, 23.1_
 
-- [~] 10. Checkpoint - Verify bot server
+- [x] 10. Checkpoint - Verify bot server
   - Ensure server starts, endpoints respond, ask the user if questions arise.
 
-- [ ] 11. Implement Next.js API proxy routes
-  - [~] 11.1 Create /api/bot/start route
+- [x] 11. Implement Next.js API proxy routes
+  - [-] 11.1 Create /api/bot/start route
     - Create `app/api/bot/start/route.ts`
     - Verify user authentication (extract userId from session/JWT)
     - Return 401 if unauthorized
@@ -260,7 +260,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return sessionId or error to client
     - _Requirements: 10.1, 10.2, 18.1, 18.2, 18.3_
   
-  - [~] 11.2 Create /api/bot/stop route
+  - [-] 11.2 Create /api/bot/stop route
     - Create `app/api/bot/stop/route.ts`
     - Verify user authentication
     - Extract sessionId from request body
@@ -268,7 +268,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return final status to client
     - _Requirements: 10.4, 10.5, 18.1, 18.2, 18.5_
   
-  - [~] 11.3 Create /api/bot/status route
+  - [-] 11.3 Create /api/bot/status route
     - Create `app/api/bot/status/route.ts`
     - Verify user authentication
     - Extract sessionId from query params
@@ -276,13 +276,13 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return bot status or 404 to client
     - _Requirements: 11.1-11.6, 18.1, 18.2_
   
-  - [~] 11.4 Add BOT_SERVER_URL environment variable
+  - [x] 11.4 Add BOT_SERVER_URL environment variable
     - Update `.env.local` with BOT_SERVER_URL
     - Document deployment URLs (Railway/Render)
     - _Requirements: 10.3, 10.4_
 
-- [ ] 12. Implement client HTTP wrapper
-  - [~] 12.1 Create bot client library
+- [x] 12. Implement client HTTP wrapper
+  - [x] 12.1 Create bot client library
     - Create `lib/bot-client.ts`
     - Implement `startBot()` → POST /api/bot/start
     - Implement `stopBot(sessionId)` → POST /api/bot/stop
@@ -296,8 +296,8 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Test error handling (401, 404, 500)
     - _Requirements: 17.1-17.5_
 
-- [ ] 13. Refactor AutoTradePanel to use HTTP bot client
-  - [~] 13.1 Update AutoTradePanel component
+- [x] 13. Refactor AutoTradePanel to use HTTP bot client
+  - [x] 13.1 Update AutoTradePanel component
     - Remove direct imports of `auto-trade-store.ts`
     - Replace with `botClient.startBot()` on "Start Bot" click
     - Start polling `botClient.getBotStatus()` every 2 seconds after start
@@ -306,19 +306,19 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Call `botClient.stopBot()` on "Stop Bot" click
     - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5_
   
-  - [~] 13.2 Add cleanup for component unmount
+  - [x] 13.2 Add cleanup for component unmount
     - Clear polling interval on component unmount
     - Prioritize unmount cleanup if stop button and unmount occur simultaneously
     - _Requirements: 17.6, 17.7_
   
-  - [~] 13.3 Display error messages from API
+  - [x] 13.3 Display error messages from API
     - Show error message from API response if start/stop fails
     - Display stopReason when session stops automatically
     - Show connection errors gracefully
     - _Requirements: 13.3, 13.4, 13.5_
 
-- [ ] 14. Remove deprecated client-side bot logic
-  - [~] 14.1 Delete auto-trade-store.ts
+- [x] 14. Remove deprecated client-side bot logic
+  - [x] 14.1 Delete auto-trade-store.ts
     - Remove `lib/auto-trade-store.ts` file
     - Verify no remaining imports in codebase
     - _Requirements: 17.1_

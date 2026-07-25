@@ -264,6 +264,128 @@ export class BotEngine {
   }
 
   /**
+   * Starts the bot session: connects to Deriv, authorizes, and places first trade.
+   * 
+   * This method orchestrates the full session start workflow:
+   * 1. Creates and connects DerivConnection
+   * 2. Authorizes with Deriv API
+   * 3. Retrieves account currency
+   * 4. Subscribes to proposal_open_contract updates
+   * 5. Marks session as running
+   * 6. Places the first trade
+   * 
+   * Requirements: 2.1, 2.2, 2.6, 4.1
+   * 
+   * @returns Promise that resolves when session is started and first trade is placed
+   * 
+   * Preconditions:
+   * - derivToken is valid
+   * - userId is non-empty
+   * - Bot state is initialized
+   * 
+   * Postconditions:
+   * - DerivConnection established and authorized
+   * - botState.currency set from authorization response
+   * - botState.isRunning set to true
+   * - First trade placed with initial stake
+   * - Portfolio subscription active
+   * 
+   * Throws:
+   * - Error if connection or authorization fails
+   * - Error if first trade placement fails
+   */
+  async startSession(): Promise<void> {
+    // Step 1: Create and connect DerivConnection (Req 2.1)
+    const connection = new DerivConnection(this.derivToken);
+    await connection.connect();
+    
+    // Step 2: Connection automatically authorizes in connect() (Req 2.2)
+    
+    // Step 3: Get account currency from authorization
+    // We need to get the currency - request balance to get it
+    const balanceResponse = await connection.request<{
+      balance?: { currency: string; balance: number };
+      error?: { message: string };
+    }>({ balance: 1 });
+    
+    if (balanceResponse.error) {
+      throw new Error(balanceResponse.error.message);
+    }
+    
+    if (!balanceResponse.balance) {
+      throw new Error("Failed to retrieve account currency");
+    }
+    
+    this.botState.currency = balanceResponse.balance.currency;
+    
+    // Step 4: Set connection on engine
+    this.setDerivConnection(connection);
+    
+    // Step 5: Subscribe to proposal_open_contract for settlement detection (Req 2.6, 4.7)
+    connection.subscribe(
+      { proposal_open_contract: 1, subscribe: 1 },
+      (data: unknown) => {
+        this.handleContractUpdate(data);
+      }
+    );
+    
+    // Step 6: Mark session as running
+    this.botState.isRunning = true;
+    
+    // Step 7: Place first trade with initial stake (Req 4.1)
+    await this.placeTrade(this.config.stake.initial);
+  }
+
+  /**
+   * Handles incoming proposal_open_contract subscription updates.
+   * 
+   * Detects contract settlements and triggers the settlement handler.
+   * 
+   * @param data - The WebSocket message data
+   */
+  private handleContractUpdate(data: unknown): void {
+    try {
+      const message = data as {
+        proposal_open_contract?: {
+          contract_id?: number;
+          status?: string;
+          profit?: number | string;
+          is_sold?: number | boolean;
+        };
+      };
+      
+      const contract = message.proposal_open_contract;
+      if (!contract) {
+        return;
+      }
+      
+      // Check if this is a settlement (contract is sold)
+      const isSold = contract.is_sold === 1 || contract.is_sold === true;
+      if (!isSold) {
+        return;
+      }
+      
+      // Check if this is our pending contract
+      if (contract.contract_id !== this.botState.pendingContractId) {
+        return;
+      }
+      
+      // Extract settlement data
+      const contractId = contract.contract_id;
+      const status = contract.status || "";
+      const profit = typeof contract.profit === "number" 
+        ? contract.profit 
+        : parseFloat(String(contract.profit || 0));
+      
+      // Handle the settlement
+      this.handleContractSettlement(contractId, status, profit);
+      
+    } catch (error) {
+      console.error("[BotEngine] Error handling contract update:", error);
+    }
+  }
+
+  /**
    * Places a trade using the specified stake amount.
    * 
    * Implements the complete trade placement workflow:
