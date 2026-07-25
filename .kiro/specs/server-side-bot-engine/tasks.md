@@ -6,8 +6,8 @@ This plan implements a server-side bot engine that moves automated trading logic
 
 ## Tasks
 
-- [ ] 1. Set up configuration validation layer
-  - [ ] 1.1 Create Zod schema validator for strategy configurations
+- [x] 1. Set up configuration validation layer
+  - [x] 1.1 Create Zod schema validator for strategy configurations
     - Create `lib/server/bot-engine/config-validator.ts`
     - Define Zod schema matching StrategyConfig interface
     - Implement validation rules: initial stake 0.01-100, multiplier 1-10, maxStake >= initial, maxConsecutiveLosses 1-20, takeProfitAmount > 0, stopLossAmount > 0, interTradeDelay >= 2000
@@ -20,7 +20,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Test edge cases (zero, negative, undefined values)
     - _Requirements: 3.2-3.10_
   
-  - [ ] 1.3 Create default strategy JSON file
+  - [x] 1.3 Create default strategy JSON file
     - Create `lib/server/bot-engine/default-strategy.json`
     - Use DIGITEVEN contract type, R_100 symbol
     - Set initial stake 0.35, multiplier 2, maxStake 10
@@ -28,18 +28,18 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Set interTradeDelay 2000ms
     - _Requirements: 23.1-23.11_
 
-- [ ] 2. Checkpoint - Verify configuration layer
+- [x] 2. Checkpoint - Verify configuration layer
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Implement core bot engine
-  - [ ] 3.1 Create BotEngine class skeleton
+- [x] 3. Implement core bot engine
+  - [x] 3.1 Create BotEngine class skeleton
     - Create `lib/server/bot-engine/bot-engine.ts`
     - Define BotEngine class with BotState and StrategyConfig properties
     - Implement constructor accepting userId, config, derivToken
     - Add utility methods: `round2()`, `generateTradeId()`
     - _Requirements: 3.11, 21.1, 21.2_
   
-  - [ ] 3.2 Implement stake progression logic
+  - [x] 3.2 Implement stake progression logic
     - Implement `calculateNextStake()` method
     - Reset to initial stake on wins
     - Multiply by config multiplier on losses, round to 2 decimals
@@ -53,7 +53,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Verify stake calculations match martingale formula
     - Test maxStake capping behavior
   
-  - [ ] 3.4 Implement P/L accounting
+  - [x] 3.4 Implement P/L accounting
     - Add `updateProfitLoss()` method
     - Parse profit from settlement messages, handle non-numeric as zero
     - Add rounded profit to accumulated P/L
@@ -67,7 +67,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Verify accumulatedPL equals sum of settled trades
     - Test rounding edge cases
   
-  - [ ] 3.6 Implement stop condition checks
+  - [x] 3.6 Implement stop condition checks
     - Add `checkStopConditions()` method
     - Check maxConsecutiveLosses, takeProfitAmount, stopLossAmount, maxStake
     - Set isRunning to false and populate stopReason when triggered
@@ -80,32 +80,32 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Verify no trades placed after stop
     - _Requirements: 7.1-7.6_
 
-- [ ] 4. Checkpoint - Verify core engine logic
+- [x] 4. Checkpoint - Verify core engine logic
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement WebSocket connection manager
-  - [ ] 5.1 Create DerivConnection class
+- [x] 5. Implement WebSocket connection manager
+  - [x] 5.1 Create DerivConnection class
     - Create `lib/server/bot-engine/deriv-connection.ts`
     - Implement connection to wss://ws.derivws.com/websockets/v3
     - Add authorization with API token
     - Implement `request<T>()` method for sending/receiving API calls
     - _Requirements: 2.1, 2.2_
   
-  - [ ] 5.2 Add reconnection logic with exponential backoff
+  - [x] 5.2 Add reconnection logic with exponential backoff
     - Implement retry mechanism (max 5 attempts)
     - Use exponential backoff delays (2s, 4s, 8s, 16s, 32s)
     - Auto-reconnect on connection drop
     - Force terminate session after max retries
     - _Requirements: 2.3, 2.4, 12.2, 12.3, 12.4_
   
-  - [ ] 5.3 Implement subscription management
+  - [x] 5.3 Implement subscription management
     - Add `subscribe()` method with message handler registration
     - Add `unsubscribe()` method
     - Track active subscription IDs
     - Subscribe to balance and portfolio updates on connection
     - _Requirements: 2.6_
   
-  - [ ] 5.4 Add connection cleanup
+  - [x] 5.4 Add connection cleanup
     - Implement `disconnect()` method
     - Unsubscribe all active subscriptions
     - Close WebSocket connection
@@ -119,8 +119,8 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Test subscription lifecycle
     - _Requirements: 2.1-2.6, 12.2-12.4_
 
-- [ ] 6. Implement trade execution workflow
-  - [ ] 6.1 Add trade placement logic to BotEngine
+- [x] 6. Implement trade execution workflow
+  - [x] 6.1 Add trade placement logic to BotEngine
     - Implement `placeTrade(stake)` method
     - Build proposal request payload
     - Send proposal, extract proposalId and askPrice
@@ -128,13 +128,13 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Record pendingContractId and create TradeRecord
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.8, 9.1_
   
-  - [ ] 6.2 Handle trade placement failures
+  - [x] 6.2 Handle trade placement failures
     - Catch proposal errors, set error field, stop session
     - Catch buy errors, set error field, stop session
     - Set stopReason to null on trade errors
     - _Requirements: 4.6, 4.10, 13.1, 13.2, 13.3, 13.4_
   
-  - [ ] 6.3 Implement contract settlement handler
+  - [x] 6.3 Implement contract settlement handler
     - Add `handleContractSettlement()` method
     - Parse proposal_open_contract messages
     - Detect settlement status (won/lost)
@@ -142,7 +142,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Call updateProfitLoss() and checkStopConditions()
     - _Requirements: 4.7, 4.9, 6.1, 6.5_
   
-  - [ ] 6.4 Add trade scheduling with inter-trade delay
+  - [x] 6.4 Add trade scheduling with inter-trade delay
     - Implement timer-based scheduling after settlement
     - Use config.execution.interTradeDelay (minimum 2000ms)
     - Cancel scheduled timer if session stopped
@@ -164,11 +164,11 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Test stop condition triggering
     - _Requirements: 4.1-4.10, 5.1-5.6, 6.1-6.6, 7.1-7.6_
 
-- [ ] 7. Checkpoint - Verify trade execution
+- [x] 7. Checkpoint - Verify trade execution
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Implement session manager
-  - [ ] 8.1 Create SessionManager class
+  - [~] 8.1 Create SessionManager class
     - Create `lib/server/bot-engine/session-manager.ts`
     - Use Map for sessionId → BotEngine storage
     - Use Map for userId → sessionId reverse index
@@ -176,14 +176,14 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Generate unique UUIDs for session IDs
     - _Requirements: 1.1, 1.2, 16.1_
   
-  - [ ] 8.2 Enforce one-bot-per-user rule
+  - [~] 8.2 Enforce one-bot-per-user rule
     - Implement `hasActiveSession(userId)` method
     - Implement `getUserSession(userId)` method
     - Reject createSession if user already has active session
     - Return error "User already has an active bot session"
     - _Requirements: 1.3, 16.2, 16.3, 16.5_
   
-  - [ ] 8.3 Implement session cleanup
+  - [~] 8.3 Implement session cleanup
     - Remove session from both Maps on deleteSession
     - Remove userId → sessionId mapping on session end
     - _Requirements: 15.4, 16.4_
@@ -202,7 +202,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - _Requirements: 1.1, 1.2, 15.4, 16.1, 16.4_
 
 - [ ] 9. Create bot server Express application
-  - [ ] 9.1 Set up Express server structure
+  - [~] 9.1 Set up Express server structure
     - Create `bot-server/` directory in project root
     - Create `bot-server/index.ts` (main entry point)
     - Create `bot-server/package.json` with dependencies (express, ws, uuid)
@@ -210,7 +210,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Add CORS middleware for Next.js origin
     - _Requirements: 10.3, 10.4_
   
-  - [ ] 9.2 Implement session start endpoint
+  - [~] 9.2 Implement session start endpoint
     - Create `bot-server/routes/sessions.ts`
     - Add POST /sessions/start route
     - Extract userId and derivToken from request body
@@ -219,7 +219,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Call startSession, return sessionId on success
     - _Requirements: 10.1, 10.2, 10.3, 10.6_
   
-  - [ ] 9.3 Implement session stop endpoint
+  - [~] 9.3 Implement session stop endpoint
     - Add POST /sessions/stop route
     - Extract sessionId and optional reason from body
     - Call BotEngine.stopSession
@@ -227,7 +227,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Handle already-stopped sessions gracefully
     - _Requirements: 10.4, 10.5, 15.5, 15.6_
   
-  - [ ] 9.4 Implement status endpoint
+  - [~] 9.4 Implement status endpoint
     - Add GET /sessions/status route
     - Extract sessionId from query params
     - Retrieve session from SessionManager
@@ -235,23 +235,23 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return BotStatus with sessionId, trades, P/L, uptime
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
   
-  - [ ] 9.5 Add error handling middleware
+  - [~] 9.5 Add error handling middleware
     - Handle malformed JSON requests
     - Handle WebSocket connection failures (return 500)
     - Log errors without crashing server
     - _Requirements: 12.1, 14.1, 14.2, 14.5_
   
-  - [ ] 9.6 Add environment configuration
+  - [~] 9.6 Add environment configuration
     - Create `bot-server/.env.example`
     - Add PORT, CORS_ORIGIN, MAX_SESSIONS config
     - Load default strategy from JSON file on startup
     - _Requirements: 22.3, 23.1_
 
-- [ ] 10. Checkpoint - Verify bot server
+- [~] 10. Checkpoint - Verify bot server
   - Ensure server starts, endpoints respond, ask the user if questions arise.
 
 - [ ] 11. Implement Next.js API proxy routes
-  - [ ] 11.1 Create /api/bot/start route
+  - [~] 11.1 Create /api/bot/start route
     - Create `app/api/bot/start/route.ts`
     - Verify user authentication (extract userId from session/JWT)
     - Return 401 if unauthorized
@@ -260,7 +260,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return sessionId or error to client
     - _Requirements: 10.1, 10.2, 18.1, 18.2, 18.3_
   
-  - [ ] 11.2 Create /api/bot/stop route
+  - [~] 11.2 Create /api/bot/stop route
     - Create `app/api/bot/stop/route.ts`
     - Verify user authentication
     - Extract sessionId from request body
@@ -268,7 +268,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return final status to client
     - _Requirements: 10.4, 10.5, 18.1, 18.2, 18.5_
   
-  - [ ] 11.3 Create /api/bot/status route
+  - [~] 11.3 Create /api/bot/status route
     - Create `app/api/bot/status/route.ts`
     - Verify user authentication
     - Extract sessionId from query params
@@ -276,13 +276,13 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Return bot status or 404 to client
     - _Requirements: 11.1-11.6, 18.1, 18.2_
   
-  - [ ] 11.4 Add BOT_SERVER_URL environment variable
+  - [~] 11.4 Add BOT_SERVER_URL environment variable
     - Update `.env.local` with BOT_SERVER_URL
     - Document deployment URLs (Railway/Render)
     - _Requirements: 10.3, 10.4_
 
 - [ ] 12. Implement client HTTP wrapper
-  - [ ] 12.1 Create bot client library
+  - [~] 12.1 Create bot client library
     - Create `lib/bot-client.ts`
     - Implement `startBot()` → POST /api/bot/start
     - Implement `stopBot(sessionId)` → POST /api/bot/stop
@@ -297,7 +297,7 @@ This plan implements a server-side bot engine that moves automated trading logic
     - _Requirements: 17.1-17.5_
 
 - [ ] 13. Refactor AutoTradePanel to use HTTP bot client
-  - [ ] 13.1 Update AutoTradePanel component
+  - [~] 13.1 Update AutoTradePanel component
     - Remove direct imports of `auto-trade-store.ts`
     - Replace with `botClient.startBot()` on "Start Bot" click
     - Start polling `botClient.getBotStatus()` every 2 seconds after start
@@ -306,43 +306,43 @@ This plan implements a server-side bot engine that moves automated trading logic
     - Call `botClient.stopBot()` on "Stop Bot" click
     - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5_
   
-  - [ ] 13.2 Add cleanup for component unmount
+  - [~] 13.2 Add cleanup for component unmount
     - Clear polling interval on component unmount
     - Prioritize unmount cleanup if stop button and unmount occur simultaneously
     - _Requirements: 17.6, 17.7_
   
-  - [ ] 13.3 Display error messages from API
+  - [~] 13.3 Display error messages from API
     - Show error message from API response if start/stop fails
     - Display stopReason when session stops automatically
     - Show connection errors gracefully
     - _Requirements: 13.3, 13.4, 13.5_
 
 - [ ] 14. Remove deprecated client-side bot logic
-  - [ ] 14.1 Delete auto-trade-store.ts
+  - [~] 14.1 Delete auto-trade-store.ts
     - Remove `lib/auto-trade-store.ts` file
     - Verify no remaining imports in codebase
     - _Requirements: 17.1_
 
-- [ ] 15. Checkpoint - Verify end-to-end flow
+- [~] 15. Checkpoint - Verify end-to-end flow
   - Test complete flow: client start → polling → trades execute → stop
   - Verify bot continues running after browser close
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 16. Add deployment configuration
-  - [ ] 16.1 Create Railway/Render deployment config
+  - [~] 16.1 Create Railway/Render deployment config
     - Create `bot-server/Dockerfile` for containerization
     - Create `bot-server/railway.json` or `render.yaml`
     - Configure environment variables (PORT, CORS_ORIGIN)
     - Set up health check endpoint GET /health
     - _Requirements: 20.1, 20.2, 20.3_
   
-  - [ ] 16.2 Document deployment steps
+  - [~] 16.2 Document deployment steps
     - Update README with bot server deployment instructions
     - Document environment variable setup
     - Add instructions for connecting Next.js to bot server
     - _Requirements: 10.3, 10.4_
 
-- [ ] 17. Final checkpoint - Complete system verification
+- [~] 17. Final checkpoint - Complete system verification
   - Test one-bot-per-user enforcement
   - Test WebSocket reconnection behavior
   - Test stop conditions trigger correctly

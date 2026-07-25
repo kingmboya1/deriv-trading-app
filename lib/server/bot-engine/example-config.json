@@ -1,0 +1,26 @@
+{
+  "name": "Default Martingale",
+  "version": "1.0.0",
+  "description": "Conservative martingale strategy for Even/Odd digits",
+  "trade": {
+    "contractType": "DIGITEVEN",
+    "symbol": "R_100",
+    "duration": 1,
+    "durationUnit": "t",
+    "barrier": ""
+  },
+  "stake": {
+    "initial": 0.35,
+    "multiplier": 2,
+    "maxStake": 10
+  },
+  "risk": {
+    "maxConsecutiveLosses": 5,
+    "takeProfitAmount": 5,
+    "stopLossAmount": 10
+  },
+  "execution": {
+    "interTradeDelay": 2000,
+    "autoRestart": false
+  }
+}

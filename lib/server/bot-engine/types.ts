@@ -68,6 +68,7 @@ export interface BotState {
   stopReason: StopReason | null;
   error: string | null;
   currency: string | null;
+  trades: TradeRecord[];
 }
 
 export type StopReason =
