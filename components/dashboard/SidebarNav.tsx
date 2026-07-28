@@ -6,7 +6,7 @@ import React from "react";
  * SidebarNav - navigation for the dashboard.
  */
 
-export type DashSection = "markets" | "trade" | "portfolio" | "autotrade";
+export type DashSection = "markets" | "trade" | "portfolio" | "autotrade" | "freebots";
 
 interface NavItem {
   id: DashSection;
@@ -50,6 +50,17 @@ const NAV_ITEMS: NavItem[] = [
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="3" />
         <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
+      </svg>
+    ),
+  },
+  {
+    id: "freebots",
+    label: "Free Bots",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <path d="M9 11V7a3 3 0 0 1 6 0v4" />
+        <circle cx="12" cy="16" r="1" fill="currentColor" />
       </svg>
     ),
   },

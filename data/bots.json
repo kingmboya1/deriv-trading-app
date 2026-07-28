@@ -1,0 +1,10 @@
+[
+  {
+    "id": "bot-default-1",
+    "name": "D'Alembert Pro",
+    "winRate": 78,
+    "description": "Conservative D'Alembert strategy on Volatility 50",
+    "strategy": "",
+    "createdAt": "2026-07-27T00:00:00.000Z"
+  }
+]
